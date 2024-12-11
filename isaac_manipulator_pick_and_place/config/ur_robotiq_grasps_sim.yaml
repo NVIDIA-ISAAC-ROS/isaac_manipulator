@@ -1,0 +1,16 @@
+format: isaac_grasp
+format_version: 1.0
+
+object_frame_link: /soup_can
+gripper_frame_link: /Robotiq_2F_140_config/robotiq_base_link
+
+grasps:
+   grasp_0:
+      confidence: 1.0
+      position: [-0.16047977431804497, 0.02774479467751147, -0.019003134916188175]
+      orientation: {w: 0.4999998394937913, xyz: [0.5000001513868532, 0.49999983879922777, 0.5000001703200242]}
+      cspace_position:
+         finger_joint: 0.03002374805510044
+      pregrasp_cspace_position:
+         finger_joint: 0.03002374805510044
+

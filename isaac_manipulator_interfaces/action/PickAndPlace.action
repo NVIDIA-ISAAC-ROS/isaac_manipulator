@@ -1,0 +1,22 @@
+# Request
+
+# Defines the object to be picked and placed at a give pose
+
+# ObjectID
+int32 object_id
+
+# Object class
+string class_id
+
+# Pose of the location to place the object
+geometry_msgs/Pose place_pose
+
+---
+# Result
+
+# Indicates if the pick and place is successful
+bool success
+
+---
+# Feedback
+int32 progress

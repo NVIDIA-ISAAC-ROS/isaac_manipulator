@@ -1,0 +1,5 @@
+# File for Isaac Sim specific nvblox parameters.
+/**:
+  ros__parameters:
+    # Do not throw away depth frames in simulation (published at 60 Hz).
+    integrate_depth_rate_hz: 70.0

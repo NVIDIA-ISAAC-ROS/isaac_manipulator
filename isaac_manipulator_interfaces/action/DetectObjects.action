@@ -1,0 +1,13 @@
+# Request
+
+# Empty trigger
+
+---
+# Result
+
+# Array of detected objects
+vision_msgs/Detection2DArray detections
+
+---
+# Feedback
+int32 progress
