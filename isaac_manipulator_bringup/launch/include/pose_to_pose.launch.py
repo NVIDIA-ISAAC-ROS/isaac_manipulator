@@ -15,33 +15,68 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-import os
-
-from ament_index_python.packages import get_package_share_directory
 import launch
-from launch.actions import IncludeLaunchDescription
-from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 
 def generate_launch_description():
 
-    goal_setter_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(get_package_share_directory('isaac_ros_moveit_goal_setter'),
-                         'launch', 'isaac_ros_goal_setter.launch.py')
-        ),
-    )
+    launch_args = [
+        DeclareLaunchArgument(
+            'world_frame',
+            default_value='base_link',
+            description='The world frame of the robot'),
+        DeclareLaunchArgument(
+            'target_frames',
+            default_value='["target1_frame", "target2_frame"]',
+            description='The list of target frames that the robot should plan towards'),
+        DeclareLaunchArgument(
+            'plan_timer_period',
+            default_value='0.01',
+            description='The time in seconds for which the goal should request a plan'),
+        DeclareLaunchArgument(
+            'planner_group_name',
+            default_value='ur_manipulator',
+            description='The MoveIt group name that the planner should plan for'),
+        DeclareLaunchArgument(
+            'pipeline_id',
+            default_value='isaac_ros_cumotion',
+            description='The MoveIt pipeline ID to use'),
+        DeclareLaunchArgument(
+            'planner_id',
+            default_value='cuMotion',
+            description='The MoveIt planner ID to use'),
+        DeclareLaunchArgument(
+            'end_effector_link',
+            default_value='wrist_3_link',
+            description='The name of the end effector link for planning'),
+    ]
+
+    world_frame = LaunchConfiguration('world_frame')
+    target_frames = LaunchConfiguration('target_frames')
+    plan_timer_period = LaunchConfiguration('plan_timer_period')
+    planner_group_name = LaunchConfiguration('planner_group_name')
+    pipeline_id = LaunchConfiguration('pipeline_id')
+    planner_id = LaunchConfiguration('planner_id')
+    end_effector_link = LaunchConfiguration('end_effector_link')
 
     pose_to_pose_node = Node(
         package='isaac_ros_moveit_goal_setter',
         namespace='',
-        executable='pose_to_pose.py',
+        executable='pose_to_pose_node',
         name='pose_to_pose_node',
-        output='screen',
         parameters=[{
-            'target_frames': ['target1_frame', 'target2_frame']
-        }]
+            'world_frame': world_frame,
+            'target_frames': target_frames,
+            'plan_timer_period': plan_timer_period,
+            'planner_group_name': planner_group_name,
+            'pipeline_id': pipeline_id,
+            'planner_id': planner_id,
+            'end_effector_link': end_effector_link,
+        }],
+        output='screen'
     )
 
-    return launch.LaunchDescription([goal_setter_launch, pose_to_pose_node])
+    return launch.LaunchDescription(launch_args + [pose_to_pose_node])

@@ -22,51 +22,63 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import LoadComposableNodes
 from launch_ros.descriptions import ComposableNode
 
+import isaac_manipulator_ros_python_utils.constants as constants
+from isaac_manipulator_ros_python_utils.types import DepthType
+from isaac_manipulator_ros_python_utils.launch_utils import get_hawk_depth_resolution
+
+
+def get_default_engine_file_path(ess_mode: DepthType) -> str:
+    if ess_mode is DepthType.ess_light:
+        default_engine_file_path = '/tmp/dnn_stereo_disparity_v4.1.0_onnx/ess_light.engine'
+    elif ess_mode is DepthType.ess_full:
+        default_engine_file_path = '/tmp/dnn_stereo_disparity_v4.1.0_onnx/ess_full.engine'
+    else:
+        raise Exception(f'DepthType {ess_mode} not implemented.')
+    return default_engine_file_path
+
 
 def launch_setup(context, *args, **kwargs):
-    ess_mode = str(context.perform_substitution(LaunchConfiguration('ess_mode')))
+    ess_mode_str = str(context.perform_substitution(LaunchConfiguration('ess_mode')))
+    ess_mode = DepthType[ess_mode_str]
+    ess_model_width, ess_model_height = get_hawk_depth_resolution(ess_mode)
 
-    engine_file_path = str(context.perform_substitution(
-        LaunchConfiguration('ess_engine_file_path')))
+    engine_file_path = str(
+        context.perform_substitution(LaunchConfiguration('ess_engine_file_path')))
+    # If the engine file path is not set use the defaults
+    if engine_file_path == '':
+        engine_file_path = get_default_engine_file_path(ess_mode)
+
     threshold = LaunchConfiguration('ess_threshold')
 
-    image_width = LaunchConfiguration('image_width')
-    image_height = LaunchConfiguration('image_height')
-    ess_model_width = LaunchConfiguration('ess_model_width')
-    ess_model_height = LaunchConfiguration('ess_model_height')
-
-    if ess_mode == 'ess_light' and  engine_file_path == '':
-        engine_file_path = '/tmp/dnn_stereo_disparity_v4.0.0/ess_light.engine'
+    if ess_mode == 'ess_light' and engine_file_path == '':
+        engine_file_path = '/tmp/dnn_stereo_disparity_v4.1.0_onnx/ess_light.engine'
     elif ess_mode == 'ess_full' and engine_file_path == '':
-        engine_file_path = '/tmp/dnn_stereo_disparity_v4.0.0/ess_full.engine'
+        engine_file_path = '/tmp/dnn_stereo_disparity_v4.1.0_onnx/ess_full.engine'
 
     left_rectify_node = ComposableNode(
         name='left_rectify_node',
         package='isaac_ros_image_proc',
         plugin='nvidia::isaac_ros::image_proc::RectifyNode',
         parameters=[{
-            'output_width': image_width,
-            'output_height': image_height,
+            'output_width': constants.HAWK_IMAGE_WIDTH,
+            'output_height': constants.HAWK_IMAGE_HEIGHT,
             'input_qos': 'SENSOR_DATA',
-            'output_qos': 'DEFAULT'
+            'output_qos': 'SENSOR_DATA'
         }],
-        remappings=[
-            ('image_raw', 'left/image_raw_drop'),
-            ('camera_info', 'left/camera_info_drop'),
-            ('image_rect', 'left/image_rect'),
-            ('camera_info_rect', 'left/camera_info_rect')
-        ]
-    )
+        remappings=[('image_raw', 'left/image_raw_drop'),
+                    ('camera_info', 'left/camera_info_drop'),
+                    ('image_rect', 'left/image_rect'),
+                    ('camera_info_rect', 'left/camera_info_rect')])
 
     right_rectify_node = ComposableNode(
         name='right_rectify_node',
         package='isaac_ros_image_proc',
         plugin='nvidia::isaac_ros::image_proc::RectifyNode',
         parameters=[{
-            'output_width': image_width,
-            'output_height': image_height,
+            'output_width': constants.HAWK_IMAGE_WIDTH,
+            'output_height': constants.HAWK_IMAGE_HEIGHT,
             'input_qos': 'SENSOR_DATA',
-            'output_qos': 'DEFAULT'
+            'output_qos': 'SENSOR_DATA'
         }],
         remappings=[
             ('image_raw', 'right/image_raw_drop'),
@@ -82,8 +94,9 @@ def launch_setup(context, *args, **kwargs):
         plugin='nvidia::isaac_ros::dnn_stereo_depth::ESSDisparityNode',
         parameters=[{'engine_file_path': engine_file_path,
                      'threshold': threshold,
-                     'input_layer_width': ess_model_width,
-                     'input_layer_height': ess_model_height}],
+                     'input_qos': 'SENSOR_DATA',
+                     'input_layer_width': int(ess_model_width),
+                     'input_layer_height': int(ess_model_height)}],
         remappings=[
             ('left/camera_info', 'left/camera_info_rect'),
             ('right/camera_info', 'right/camera_info_rect'),
@@ -106,10 +119,11 @@ def launch_setup(context, *args, **kwargs):
         package='isaac_ros_image_proc',
         plugin='nvidia::isaac_ros::image_proc::ResizeNode',
         parameters=[{
-            'input_width': image_width,
-            'input_height': image_height,
-            'output_width': ess_model_width,
-            'output_height': ess_model_height,
+            'input_qos': 'SENSOR_DATA',
+            'input_width': constants.HAWK_IMAGE_WIDTH,
+            'input_height': constants.HAWK_IMAGE_HEIGHT,
+            'output_width': int(ess_model_width),
+            'output_height': int(ess_model_height),
             'keep_aspect_ratio': False,
             'encoding_desired': 'rgb8',
             'disable_padding': False
@@ -123,7 +137,7 @@ def launch_setup(context, *args, **kwargs):
     )
 
     load_nodes = LoadComposableNodes(
-        target_container='manipulation_container',
+        target_container=constants.MANIPULATOR_CONTAINER_NAME,
         composable_node_descriptions=[
             left_rectify_node,
             right_rectify_node,
@@ -155,17 +169,9 @@ def generate_launch_description():
                         'for filtering disparity with confidence.'),
         DeclareLaunchArgument(
             'ess_mode',
-            default_value='ess_light',
-            choices=['ess_light', 'ess_full'],
+            default_value=str(DepthType.ess_full),
+            choices=DepthType.names(),
             description='ESS model type. Choose between ess_light and ess_full.'),
-        DeclareLaunchArgument(
-            'image_width',
-            default_value='1920',
-            description='Input image width.'),
-        DeclareLaunchArgument(
-            'image_height',
-            default_value='1200',
-            description='Input image height.'),
     ]
 
     return LaunchDescription(launch_args + [OpaqueFunction(function=launch_setup)])

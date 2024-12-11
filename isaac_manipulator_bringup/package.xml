@@ -21,7 +21,7 @@ SPDX-License-Identifier: Apache-2.0
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>isaac_manipulator_bringup</name>
-  <version>3.1.0</version>
+  <version>3.2.0</version>
   <description>Reference example package for Isaac Manipulator</description>
   <maintainer email="isaac-ros-maintainers@nvidia.com">Isaac ROS Maintainers</maintainer>
   <license>Apache-2.0</license>
@@ -29,16 +29,34 @@ SPDX-License-Identifier: Apache-2.0
   <author>Kajanan Chinniah</author>
   <author>Swapnesh Wani</author>
 
+  <depend>isaac_manipulator_ros_python_utils</depend>
+  <depend>isaac_ros_cumotion</depend>
   <depend>isaac_ros_cumotion_examples</depend>
+  <depend>isaac_ros_cumotion_interfaces</depend>
   <depend>isaac_ros_cumotion_moveit</depend>
+  <depend>isaac_ros_cumotion_object_attachment</depend>
+  <depend>isaac_ros_dope</depend>
+  <depend>isaac_ros_esdf_visualizer</depend>
   <depend>isaac_ros_ess</depend>
+  <depend>isaac_ros_foundationpose</depend>
+  <depend>isaac_ros_hawk</depend>
   <depend>isaac_ros_image_proc</depend>
+  <depend>isaac_ros_launch_utils</depend>
   <depend>isaac_ros_moveit_goal_setter</depend>
   <depend>isaac_ros_nitros_topic_tools</depend>
+  <depend>isaac_ros_pose_proc</depend>
+  <depend>isaac_ros_rtdetr</depend>
+  <depend>isaac_ros_tensor_proc</depend>
   <depend>nvblox_ros</depend>
+  <depend>nvblox_examples_bringup</depend>
   <depend>ros2launch</depend>
   <depend>tf2_ros</depend>
   <depend>ur_moveit_config</depend>
+
+  <test_depend>isaac_ros_test_cmake</test_depend>
+
+  <build_depend>isaac_ros_common</build_depend>
+  <build_depend>isaac_ros_ess_models_install</build_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

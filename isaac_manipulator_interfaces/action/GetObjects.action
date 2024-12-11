@@ -1,0 +1,12 @@
+# Request
+
+# Empty trigger
+
+---
+# Result
+
+# Array of objects
+ObjectInfo[] objects
+---
+# Feedback
+int32 progress

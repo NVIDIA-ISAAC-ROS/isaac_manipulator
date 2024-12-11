@@ -1,0 +1,14 @@
+# Request
+
+# Region of interest to detect pose in the image space
+vision_msgs/Detection2D roi
+
+---
+# Result
+
+# Array of pose
+vision_msgs/Detection3DArray poses
+
+---
+# Feedback
+int32 progress

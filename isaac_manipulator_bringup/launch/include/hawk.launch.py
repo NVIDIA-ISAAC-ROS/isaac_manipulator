@@ -20,6 +20,8 @@ from launch.actions import GroupAction
 from launch_ros.actions import LoadComposableNodes
 from launch_ros.descriptions import ComposableNode
 
+import isaac_manipulator_ros_python_utils.constants as constants
+
 
 def generate_launch_description():
     correlated_timestamp_driver_node = ComposableNode(
@@ -36,7 +38,7 @@ def generate_launch_description():
         parameters=[{'module_id': 0,
                      'input_qos': 'SENSOR_DATA',
                      'output_qos': 'SENSOR_DATA',
-                     'enable_statistics': True,
+                     'enable_diagnostics': True,
                      'topics_list': ['left/image_raw'],
                      'expected_fps_list': [30.0],
                      'jitter_tolerance_us': 30000}],
@@ -46,13 +48,13 @@ def generate_launch_description():
     )
 
     drop_node = ComposableNode(
-        name='drop_node',
+        name='hawk_drop_node',
         package='isaac_ros_nitros_topic_tools',
         plugin='nvidia::isaac_ros::nitros::NitrosCameraDropNode',
         parameters=[{
             'input_qos': 'SENSOR_DATA',
             'output_qos': 'SENSOR_DATA',
-            'X': 5,
+            'X': 20,
             'Y': 30,
             'mode': 'stereo',
             'sync_queue_size': 100
@@ -70,11 +72,11 @@ def generate_launch_description():
     )
 
     load_nodes = LoadComposableNodes(
-        target_container='manipulation_container',
+        target_container=constants.MANIPULATOR_CONTAINER_NAME,
         composable_node_descriptions=[
             correlated_timestamp_driver_node,
             hawk_node,
-            drop_node,
+            drop_node
         ],
     )
 
