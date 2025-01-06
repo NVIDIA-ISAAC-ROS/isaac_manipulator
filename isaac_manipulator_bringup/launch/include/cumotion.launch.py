@@ -27,7 +27,7 @@ from launch.substitutions import LaunchConfiguration
 def generate_launch_description():
     launch_args = [
         DeclareLaunchArgument(
-            'robot_file_name', default_value='ur5e_robotiq_2f_140.yml',
+            'robot_file_name', default_value='kinova_gen3.yml',
             description='The file path that describes robot'),
         DeclareLaunchArgument(
             'time_dilation_factor', default_value='0.25',
@@ -57,7 +57,7 @@ def generate_launch_description():
                           'cumotion_planner.voxel_dims': '[2.0, 2.0, 2.0]',
                           'cumotion_planner.grid_position': '[0.0, 0.0, 0.0]',
                           'cumotion_planner.time_dilation_factor': time_dilation_factor,
-                          'cumotion_planner.tool_frame': 'wrist_3_link',
+                          'cumotion_planner.end_effector_link': 'tool_frame',
                           'cumotion_planner.read_esdf_world': 'True',
                           'cumotion_planner.publish_curobo_world_as_voxels': 'True',
                           'cumotion_planner.override_moveit_scaling_factors': 'True',

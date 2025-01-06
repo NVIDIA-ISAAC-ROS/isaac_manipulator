@@ -30,8 +30,8 @@ def launch_setup(context, *args, **kwargs):
     world_pose_hawk_camera = Node(
         package='tf2_ros',
         executable='static_transform_publisher',
-        arguments=['--x', '-0.95662777', '--y', '0.62544195', '--z', '0.58333933',
-                   '--qx', '0.07346877', '--qy', '0.13587378', '--qz', '-0.56931322', '--qw', '0.80747948',
+        arguments=['--x', '0.4', '--y', '0.62544195', '--z', '0.58333933',
+                   '--qx', '0.07346877', '--qy', '0.13587378', '--qz', '0.56931322', '--qw', '0.80747948',
                    '--frame-id', 'world', '--child-frame-id', 'camera'],
         condition=IfCondition(PythonExpression([f'"{camera_type}"', ' == ', '"hawk"'])),
     )
@@ -39,8 +39,8 @@ def launch_setup(context, *args, **kwargs):
     world_pose_realsense_camera = Node(
         package='tf2_ros',
         executable='static_transform_publisher',
-        arguments=['--x', '-0.70078', '--y', '0.593563', '--z', '0.994128',
-                   '--qx', '0.261831', '--qy', '0.215316', '--qz', '-0.622901', '--qw', '0.705037',
+        arguments=['--x', '0.8904', '--y', '-0.0193', '--z', '1.1558',
+                   '--qx', '0.6747', '--qy', '-0.1757', '--qz', '-0.1604', '--qw', '0.6988',
                    '--frame-id', 'world', '--child-frame-id', 'camera_1_link'],
         condition=IfCondition(PythonExpression([f'"{camera_type}"', ' == ', '"realsense"'])),
     )
@@ -48,7 +48,7 @@ def launch_setup(context, *args, **kwargs):
     world_pose_target1_frame = Node(
         package='tf2_ros',
         executable='static_transform_publisher',
-        arguments=['--x', '-0.7', '--y', '0.3', '--z', '0.4',
+        arguments=['--x', '0.3', '--y', '0.3', '--z', '0.15',
                    '--qx', '1.0', '--qy', '0.0', '--qz', '0.0', '--qw', '0.0',
                    '--frame-id', 'world', '--child-frame-id', 'target1_frame'],
     )
@@ -56,7 +56,7 @@ def launch_setup(context, *args, **kwargs):
     world_pose_target2_frame = Node(
         package='tf2_ros',
         executable='static_transform_publisher',
-        arguments=['--x', '-0.7', '--y', '-0.3', '--z', '0.4',
+        arguments=['--x', '0.3', '--y', '-0.3', '--z', '0.15',
                    '--qx', '1.0', '--qy', '0.0', '--qz', '0.0', '--qw', '0.0',
                    '--frame-id', 'world', '--child-frame-id', 'target2_frame'],
     )
