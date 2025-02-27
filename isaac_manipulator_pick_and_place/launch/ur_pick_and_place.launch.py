@@ -529,6 +529,7 @@ def launch_setup(context, *args, **kwargs):
                      'retract_in_world_frame': True,
                      'use_pose_from_rviz': use_pose_from_rviz,
                      'end_effector_mesh_resource_uri': mesh_uri,
+                     'joint_states_topic': '/joint_states'
                      }],
         output='screen',
     )
