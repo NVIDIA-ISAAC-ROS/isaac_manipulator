@@ -799,6 +799,7 @@ def get_pick_and_place_orchestrator(workflow_config: IsaacSimWorkflowConfig) -> 
             'retract_in_world_frame': True,
             'use_pose_from_rviz': workflow_config.use_pose_from_rviz,
             'end_effector_mesh_resource_uri': mesh_uri,
+            'joint_states_topic': '/isaac_joint_states'
         }],
         output='screen',
     )
