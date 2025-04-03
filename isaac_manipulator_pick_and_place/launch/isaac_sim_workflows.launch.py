@@ -282,7 +282,7 @@ def get_cumotion_node(
             'distance_threshold': '0.05',
             'time_dilation_factor': '1.0',
             'urdf_file_path': urdf_file_name,
-            'qos_setting': 'DEFAULT',
+            'qos_setting': 'SENSOR_DATA',
             'enable_object_attachment': 'true' if enable_object_attachment else 'false',
             'workspace_bounds_name': WORKSPACE_BOUNDS_NAME,
             'trigger_aabb_object_clearing': 'True'
