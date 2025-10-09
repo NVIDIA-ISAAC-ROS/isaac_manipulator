@@ -33,17 +33,17 @@ add_graph_startup_test(realsense_pose_to_pose_dry_run
     launch/cumotion_nvblox_pose_to_pose.launch.py
     TIMEOUT 20
     ARGS
-"camera_type:=realsense num_cameras:=2 setup:=zurich_test_bench rosbag:=${DUMMY_BAG_PATH} \
-run_rviz:=False run_foxglove:=False log_level:=info"
+"camera_type:=realsense num_cameras:=2 setup:=zurich_test_bench \
+run_rviz:=False run_foxglove:=False log_level:=info disable_esdf_visualizer:=True no_robot_mode:=True enable_test_keepalive:=True disable_cameras:=True"
 )
 
 add_graph_startup_test(hawk_pose_to_pose_dry_run
     launch/cumotion_nvblox_pose_to_pose.launch.py
     TIMEOUT 20
     ARGS
-"camera_type:=hawk rosbag:=${DUMMY_BAG_PATH} no_robot_mode:=True \
+"camera_type:=hawk no_robot_mode:=True \
 ess_engine_file_path:=${ISAAC_ROS_WS}/isaac_ros_assets/models/dnn_stereo_disparity/dnn_stereo_disparity_v4.1.0_onnx/ess.engine \
-setup:=zurich_test_bench run_rviz:=False run_foxglove:=False log_level:=info"
+setup:=zurich_test_bench run_rviz:=False run_foxglove:=False log_level:=info disable_esdf_visualizer:=True enable_test_keepalive:=True disable_cameras:=True"
 )
 
 # Add installation of ESS models as a test fixture.
@@ -51,7 +51,7 @@ get_isaac_ros_asset_install_script_path(install_ess_models_script install_ess_mo
 ament_add_test(setup_ess_models
     COMMAND "${install_ess_models_script}"
     ENV "ISAAC_ROS_SKIP_ASSET_INSTALL="
-    TIMEOUT 1200
+    TIMEOUT 200
     GENERATE_RESULT_FOR_RETURN_CODE_ZERO
 )
 
