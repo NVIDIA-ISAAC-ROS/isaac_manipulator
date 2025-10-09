@@ -57,6 +57,26 @@ def generate_launch_description() -> lut.LaunchDescription:
     args.add_arg(
         'rosbag', 'None', cli=True, description='Path to rosbag (running on sensor if not set).')
     args.add_arg('log_level', 'error', cli=True, choices=['debug', 'info', 'warn', 'error'])
+    args.add_arg(
+        'disable_esdf_visualizer',
+        default=False,
+        cli=True,
+        description='If true, disables the ESDF visualizer (useful for testing).')
+    args.add_arg(
+        'enable_test_keepalive',
+        default=False,
+        cli=True,
+        description='If true, enables a keepalive node for testing purposes.')
+    args.add_arg(
+        'rosbag_loop',
+        default=False,
+        cli=True,
+        description='If true, enables looping playback of rosbag (useful for testing).')
+    args.add_arg(
+        'disable_cameras',
+        default=False,
+        cli=True,
+        description='If true, disables camera drivers (useful for testing).')
     actions = args.get_launch_actions()
 
     # Configuration
@@ -77,7 +97,12 @@ def generate_launch_description() -> lut.LaunchDescription:
                 'camera_ids_config_name': args.setup
             },
             condition=lut.IfCondition(lut.AndSubstitution(
-                is_realsense_camera, lu.is_not(run_from_bag))),
+                is_realsense_camera,
+                lut.AndSubstitution(
+                    lu.is_not(run_from_bag),
+                    lu.is_not(args.disable_cameras)
+                )
+            )),
         ))
 
     # Hawk driver
@@ -86,12 +111,21 @@ def generate_launch_description() -> lut.LaunchDescription:
             'isaac_manipulator_bringup',
             'launch/include/hawk.launch.py',
             condition=lut.IfCondition(lut.AndSubstitution(
-                is_hawk_camera, lu.is_not(run_from_bag))),
+                is_hawk_camera,
+                lut.AndSubstitution(
+                    lu.is_not(run_from_bag),
+                    lu.is_not(args.disable_cameras)
+                )
+            )),
         ))
 
     # Play ros2bag
     actions.append(
-        lu.play_rosbag(bag_path=args.rosbag, condition=lut.IfCondition(lu.is_valid(args.rosbag))))
+        lu.play_rosbag(
+            bag_path=args.rosbag,
+            loop=args.rosbag_loop,
+            condition=lut.IfCondition(lu.is_valid(args.rosbag))
+        ))
 
     # ESS
     actions.append(
@@ -101,7 +135,10 @@ def generate_launch_description() -> lut.LaunchDescription:
             launch_arguments={
                 'ess_mode': args.hawk_depth_mode,
             },
-            condition=lut.IfCondition(is_hawk_camera),
+            condition=lut.IfCondition(lut.AndSubstitution(
+                is_hawk_camera,
+                lu.is_not(args.disable_cameras)
+            )),
         ))
 
     # Cumotion + robot segmenter
@@ -115,6 +152,7 @@ def generate_launch_description() -> lut.LaunchDescription:
                 'no_robot_mode': args.no_robot_mode,
                 'from_bag': run_from_bag,
                 'workspace_bounds_name': args.setup,
+                'disable_esdf_visualizer': args.disable_esdf_visualizer,
             },
         ))
 
@@ -162,8 +200,25 @@ def generate_launch_description() -> lut.LaunchDescription:
             'launch/visualization/visualization.launch.py',
             launch_arguments={'camera_type': args.camera_type}))
 
-    # Component container
+    # Component container - only create if we actually need composable nodes
+    # Create container only for robot mode (not for camera-only or disabled modes)
+    create_container = lu.is_not(args.no_robot_mode)
+
     actions.append(
-        lu.component_container(constants.MANIPULATOR_CONTAINER_NAME, log_level=args.log_level))
+        lu.component_container(
+            constants.MANIPULATOR_CONTAINER_NAME,
+            log_level=args.log_level,
+            condition=lut.IfCondition(create_container)
+        ))
+
+    # Test keepalive node - simple node that stays alive during testing
+    actions.append(
+        lut.Node(
+            package='demo_nodes_cpp',
+            executable='listener',
+            name='test_keepalive_listener',
+            condition=lut.IfCondition(args.enable_test_keepalive),
+            output='screen'
+        ))
 
     return lut.LaunchDescription(actions)

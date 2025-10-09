@@ -120,7 +120,7 @@ def add_cumotion(args: lu.ArgumentContainer) -> List[Action]:
                     'cumotion_planner.urdf_path': args.urdf_file_path,
                 },
             ))
-    else:
+    elif not args.disable_esdf_visualizer:
         actions.append(
             Node(
                 package='isaac_ros_esdf_visualizer',
@@ -366,6 +366,11 @@ def generate_launch_description() -> LaunchDescription:
         description='Amount by which to pad each dimension of the AABB enclosing the object, in '
                     'meters, for the purpose of ESDF clearing',
     )
+    args.add_arg(
+        'disable_esdf_visualizer',
+        default=False,
+        cli=True,
+        description='If true, disables the ESDF visualizer (useful for testing).')
 
     args.add_opaque_function(add_cumotion)
     return LaunchDescription(args.get_launch_actions())
