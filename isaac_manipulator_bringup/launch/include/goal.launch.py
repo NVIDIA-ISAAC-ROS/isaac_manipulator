@@ -16,7 +16,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import launch
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, Shutdown
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
@@ -35,7 +35,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'grasp_frame_stale_time_threshold',
             default_value='30.0',
-            description='The duration until a grasp frame (goal) not updating is considered stale'),
+            description='The duration after which a grasp frame (goal) is considered stale'),
         DeclareLaunchArgument(
             'goal_change_position_threshold',
             default_value='0.1',
@@ -88,7 +88,8 @@ def generate_launch_description():
             'planner_id': planner_id,
             'end_effector_link': end_effector_link,
         }],
-        output='screen'
+        output='screen',
+        on_exit=Shutdown()
     )
 
     return (launch.LaunchDescription(launch_args + [goal_init_node]))

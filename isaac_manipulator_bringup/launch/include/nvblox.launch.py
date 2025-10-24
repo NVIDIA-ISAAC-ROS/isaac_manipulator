@@ -18,20 +18,28 @@
 import os
 from typing import List, Tuple
 
-import isaac_ros_launch_utils.all_types as lut
-import isaac_ros_launch_utils as lu
-
 import isaac_manipulator_ros_python_utils.constants as constants
-from isaac_manipulator_ros_python_utils.types import CameraType
+from isaac_manipulator_ros_python_utils.manipulator_types import CameraType
+
+import isaac_ros_launch_utils as lu
+import isaac_ros_launch_utils.all_types as lut
 
 
-def get_realsense_remappings(num_cameras: int, no_robot_mode: bool) -> List[Tuple[str, str]]:
+def get_realsense_remappings(
+    num_cameras: int, no_robot_mode: bool, enable_dnn_depth_in_realsense: bool
+                             ) -> List[Tuple[str, str]]:
     remappings = []
     for i in range(num_cameras):
-        remappings.append((f'/camera_{i}/color/image', f'/camera_{i+1}/color/image_raw'))
-        remappings.append((f'/camera_{i}/color/camera_info', f'/camera_{i+1}/color/camera_info'))
-        remappings.append((f'/camera_{i}/depth/camera_info',
-                           f'/camera_{i+1}/aligned_depth_to_color/camera_info'))
+        remapped_image_topic = f'/camera_{i+1}/color/image_raw'
+        remapped_camera_info_topic = f'/camera_{i+1}/color/camera_info'
+        remapped_depth_camera_info_topic = f'/camera_{i+1}/aligned_depth_to_color/camera_info'
+        if enable_dnn_depth_in_realsense:
+            remapped_image_topic = f'/camera_{i+1}/rgb/image_rect_color'
+            remapped_camera_info_topic = f'/camera_{i+1}/rgb/camera_info'
+            remapped_depth_camera_info_topic = f'/camera_{i+1}/rgb/camera_info'
+        remappings.append((f'/camera_{i}/color/image', remapped_image_topic))
+        remappings.append((f'/camera_{i}/color/camera_info', remapped_camera_info_topic))
+        remappings.append((f'/camera_{i}/depth/camera_info', remapped_depth_camera_info_topic))
         # If we have no robot, nvblox consumes the depth image directly.
         # Otherwise the depth image published by the robot segmenter is used.
         if no_robot_mode:
@@ -42,27 +50,13 @@ def get_realsense_remappings(num_cameras: int, no_robot_mode: bool) -> List[Tupl
     return remappings
 
 
-def get_hawk_remappings(no_robot_mode: bool) -> List[Tuple[str, str]]:
-    remappings = []
-    remappings.append(('/camera_0/color/image', '/rgb/image_rect_color'))
-    remappings.append(('/camera_0/color/camera_info', '/rgb/camera_info'))
-    # If we have no robot, nvblox consumes the depth image directly.
-    # Otherwise the depth image published by the robot segmenter is used.
-    if no_robot_mode:
-        remappings.append(('/camera_0/depth/image', '/depth_image'))
-    else:
-        remappings.append(('/camera_0/depth/image', '/cumotion/camera_1/world_depth'))
-    remappings.append(('/camera_0/depth/camera_info', '/rgb/camera_info'))
-    return remappings
-
-
 def get_sim_remappings() -> List[Tuple[str, str]]:
     remappings = []
     remappings.append(('/camera_0/color/image', '/front_stereo_camera/left/image_raw'))
     remappings.append(('/camera_0/color/camera_info', '/front_stereo_camera/left/camera_info'))
     # We want nvblox to consume the depth map that segments out the robot
     remappings.append(('/camera_0/depth/image', '/cumotion/camera_1/world_depth'))
-    remappings.append(('/camera_0/depth/camera_info', '/front_stereo_camera/depth/camera_info'))
+    remappings.append(('/camera_0/depth/camera_info', '/front_stereo_camera/left/camera_info'))
     return remappings
 
 
@@ -71,22 +65,19 @@ def add_nvblox(args: lu.ArgumentContainer) -> List[lut.Action]:
     num_cameras = int(args.num_cameras)
     no_robot_mode = lu.is_true(args.no_robot_mode)
     workspace_bounds_name = str(args.workspace_bounds_name)
+    enable_dnn_depth_in_realsense = lu.is_true(args.enable_dnn_depth_in_realsense)
     actions = []
 
     # Check if the configuration is valid
-    if camera_type is CameraType.hawk:
-        assert num_cameras == 1, 'Running multiple hawk cameras not allowed.'
-    elif camera_type is CameraType.realsense:
+    if camera_type is CameraType.REALSENSE:
         assert num_cameras <= 2, 'Running more than 2 RealSense cameras not allowed.'
-    elif camera_type is CameraType.isaac_sim:
+    elif camera_type is CameraType.ISAAC_SIM:
         assert num_cameras == 1, 'Running multiple cameras in Isaac Sim not allowed.'
 
     # Get config files
     base_config = lu.get_path('nvblox_examples_bringup', 'config/nvblox/nvblox_base.yaml')
     manipulator_base_config = lu.get_path('isaac_manipulator_bringup',
                                           'config/nvblox/nvblox_manipulator_base.yaml')
-    hawk_config = lu.get_path('isaac_manipulator_bringup',
-                              'config/nvblox/specializations/nvblox_manipulator_hawk.yaml')
     realsense_config = lu.get_path(
         'isaac_manipulator_bringup',
         'config/nvblox/specializations/nvblox_manipulator_realsense.yaml')
@@ -96,13 +87,12 @@ def add_nvblox(args: lu.ArgumentContainer) -> List[lut.Action]:
                                    f'config/nvblox/workspace_bounds/{workspace_bounds_name}.yaml')
 
     # Get remappings and specialized parameters
-    if camera_type is CameraType.hawk:
-        remappings = get_hawk_remappings(no_robot_mode)
-        camera_config = hawk_config
-    elif camera_type is CameraType.realsense:
-        remappings = get_realsense_remappings(num_cameras, no_robot_mode)
+    if camera_type is CameraType.REALSENSE:
+        remappings = get_realsense_remappings(
+            num_cameras, no_robot_mode, enable_dnn_depth_in_realsense
+        )
         camera_config = realsense_config
-    elif camera_type is CameraType.isaac_sim:
+    elif camera_type is CameraType.ISAAC_SIM:
         remappings = get_sim_remappings()
         camera_config = isaac_sim_config
     else:
@@ -121,6 +111,38 @@ def add_nvblox(args: lu.ArgumentContainer) -> List[lut.Action]:
     parameters.append(workspace_config)
     parameters.append({'num_cameras': num_cameras})
 
+    nitros_bridge_nodes = []
+
+    for i in range(num_cameras):
+        nitros_bridge_node_depth = lut.ComposableNode(
+            name=f'nitros_bridge_node_depth_{i+1}',
+            package='isaac_ros_nitros_bridge_ros2',
+            plugin='nvidia::isaac_ros::nitros_bridge::ImageConverterNode',
+            parameters=[{
+                'bridge_sub_qos': 'SENSOR_DATA',
+                'nitros_pub_qos': 'SENSOR_DATA'
+            }],
+            remappings=[
+                ('ros2_input_bridge_image', f'/cumotion/camera_{i+1}/world_depth_bridge'),
+                ('ros2_output_image', f'/cumotion/camera_{i+1}/world_depth')]
+        )
+
+        nitros_bridge_node_mask = lut.ComposableNode(
+            name=f'nitros_bridge_node_mask_{i+1}',
+            package='isaac_ros_nitros_bridge_ros2',
+            plugin='nvidia::isaac_ros::nitros_bridge::ImageConverterNode',
+            parameters=[{
+                'bridge_sub_qos': 'SENSOR_DATA',
+                'nitros_pub_qos': 'SENSOR_DATA'
+            }],
+            remappings=[
+                ('ros2_input_bridge_image', f'/cumotion/camera_{i+1}/robot_mask_bridge'),
+                ('ros2_output_image', f'/cumotion/camera_{i+1}/robot_mask')]
+        )
+
+        nitros_bridge_nodes.append(nitros_bridge_node_depth)
+        nitros_bridge_nodes.append(nitros_bridge_node_mask)
+
     nvblox_node = lut.ComposableNode(
         name='nvblox_node',
         package='nvblox_ros',
@@ -128,7 +150,8 @@ def add_nvblox(args: lu.ArgumentContainer) -> List[lut.Action]:
         remappings=remappings,
         parameters=parameters)
 
-    actions.append(lu.load_composable_nodes(args.container_name, [nvblox_node]))
+    actions.append(lu.load_composable_nodes(args.container_name,
+                                            nitros_bridge_nodes + [nvblox_node]))
     actions.append(
         lu.log_info([
             "Enabling nvblox for '",
@@ -143,6 +166,7 @@ def generate_launch_description() -> lut.LaunchDescription:
     args = lu.ArgumentContainer()
     args.add_arg('camera_type')
     args.add_arg('no_robot_mode', False)
+    args.add_arg('enable_dnn_depth_in_realsense', False)
     args.add_arg('num_cameras', 1)
     args.add_arg('workspace_bounds_name', '')
     args.add_arg('container_name', constants.MANIPULATOR_CONTAINER_NAME)

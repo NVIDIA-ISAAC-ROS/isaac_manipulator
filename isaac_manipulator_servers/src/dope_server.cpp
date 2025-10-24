@@ -46,7 +46,7 @@ DopeServer::DopeServer(const rclcpp::NodeOptions & options)
       "out_detections_topic_name", "dope_server/detections")),
   enable_2d_detections_(declare_parameter<bool>("enable_2d_detections", false)),
   sub_qos_{::isaac_ros::common::AddQosParameter(*this, "SENSOR_DATA", "sub_qos")},
-  pub_qos_{::isaac_ros::common::AddQosParameter(*this, "SENSOR_DATA", "pub_qos")},
+  pub_qos_{::isaac_ros::common::AddQosParameter(*this, "DEFAULT", "pub_qos")},
   img_pub_(
     create_publisher<sensor_msgs::msg::Image>(out_img_topic_name_, pub_qos_)),
   cam_info_pub_(

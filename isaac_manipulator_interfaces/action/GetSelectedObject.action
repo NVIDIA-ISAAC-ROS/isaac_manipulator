@@ -1,0 +1,10 @@
+# Request
+vision_msgs/Detection2DArray detections
+
+---
+# Result
+vision_msgs/Detection2D selected_detection
+
+---
+# Feedback
+int32 progress 

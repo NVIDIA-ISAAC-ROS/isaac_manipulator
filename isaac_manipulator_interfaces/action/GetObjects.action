@@ -1,6 +1,8 @@
 # Request
 
-# Empty trigger
+# Optional parameters to add in order to to integrate with Segment Anything
+bool use_initial_hint
+geometry_msgs/Point initial_hint
 
 ---
 # Result

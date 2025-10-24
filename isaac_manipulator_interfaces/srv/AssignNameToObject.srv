@@ -1,0 +1,7 @@
+# Request
+int32 object_id
+string name
+---
+# Response
+# Success or failure
+bool result

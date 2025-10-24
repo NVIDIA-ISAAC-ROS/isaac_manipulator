@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-# Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,32 +23,40 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 
-
 find_package(ament_cmake_auto REQUIRED)
 ament_auto_find_build_dependencies()
 
 set(MSG_FILES
 "msg/ObjectInfo.msg"
+"msg/InsertionRequest.msg"
 )
 
 set(ACTION_FILES
+"action/AddSegmentationMask.action"
 "action/DetectObjects.action"
+"action/SegmentAnything.action"
 "action/EstimatePoseDope.action"
 "action/EstimatePoseFoundationPose.action"
+"action/GearAssembly.action"
 "action/GetObjects.action"
 "action/GetObjectPose.action"
 "action/PickAndPlace.action"
+"action/GetSelectedObject.action"
+"action/Insert.action"
+"action/MultiObjectPickAndPlace.action"
 )
 
 set(SRV_FILES
 "srv/ClearObjects.srv"
+"srv/AddMeshToObject.srv"
+"srv/AssignNameToObject.srv"
 )
 
 rosidl_generate_interfaces(${PROJECT_NAME}
 ${MSG_FILES}
 ${ACTION_FILES}
 ${SRV_FILES}
-  DEPENDENCIES geometry_msgs vision_msgs
+  DEPENDENCIES geometry_msgs vision_msgs sensor_msgs
 )
 ament_export_dependencies(rosidl_default_runtime)
 

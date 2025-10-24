@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 
 <!--
-SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+SPDX-FileCopyrightText: Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,35 +21,34 @@ SPDX-License-Identifier: Apache-2.0
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>isaac_manipulator_pick_and_place</name>
-  <version>3.2.6</version>
+  <version>4.0.0</version>
   <description>Reference example package for Isaac Manipulator Pick and Place</description>
   <maintainer email="isaac-ros-maintainers@nvidia.com">Isaac ROS Maintainers</maintainer>
   <license>Apache-2.0</license>
   <url type="website">https://developer.nvidia.com/isaac-ros-gems/</url>
+  <author>Animesh Singhal</author>
   <author>Ashwin Varghese Kuruttukulam</author>
   <author>Karanbir Chahal</author>
   <author>Swapnesh Wani</author>
 
-  <depend>isaac_ros_common</depend>
-  <depend>isaac_manipulator_bringup</depend>
   <depend>isaac_manipulator_interfaces</depend>
+  <depend>isaac_manipulator_orchestration</depend>
   <depend>isaac_manipulator_ros_python_utils</depend>
-  <depend>isaac_manipulator_servers</depend>
-  <depend>isaac_ros_cumotion_interfaces</depend>
-  <depend>isaac_ros_cumotion_object_attachment</depend>
-  <depend>isaac_ros_cumotion_robot_description</depend>
-  <depend>isaac_ros_goal_setter_interfaces</depend>
-  <depend>moveit_task_constructor_core</depend>
-  <depend>moveit_visual_tools</depend>
-  <depend>rclcpp</depend>
-  <depend>robotiq_controllers</depend>
-  <depend>robotiq_description</depend>
-  <depend>ur_client_library</depend>
-  <depend>ur_robot_driver</depend>
-  <depend>vision_msgs</depend>
-  <depend>yaml_cpp_vendor</depend>
+  <depend>py_trees</depend>
+  <depend>py_trees_ros</depend>
+  <depend>py_trees_ros_viewer</depend>
+
+  <depend>rclpy</depend>
+  <depend>tf2_ros_py</depend>
+
+  <exec_depend>ros2launch</exec_depend>
+
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
 
   <export>
-    <build_type>ament_cmake</build_type>
+    <build_type>ament_python</build_type>
   </export>
 </package>

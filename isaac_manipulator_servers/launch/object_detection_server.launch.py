@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-# Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -44,6 +44,16 @@ def generate_launch_description():
             description='Image topic as output for object detection server',
         ),
         DeclareLaunchArgument(
+            'obj_input_camera_info_topic_name',
+            default_value='/camera_1/color/camera_info',
+            description='Camera info topic as input for object detection server',
+        ),
+        DeclareLaunchArgument(
+            'obj_output_camera_info_topic_name',
+            default_value='/object_detection_server/camera_info',
+            description='Camera info topic as output for object detection server',
+        ),
+        DeclareLaunchArgument(
             'obj_input_detections_topic_name',
             default_value='/detections',
             description='The topic name for input detections to parse',
@@ -53,6 +63,16 @@ def generate_launch_description():
             default_value='object_detection_server/detections_output',
             description='The topic name for output detections to parse',
         ),
+        DeclareLaunchArgument(
+            'obj_input_qos',
+            default_value='SENSOR_DATA',
+            description='Subscription QoS profile for the Object Detection Server',
+        ),
+        DeclareLaunchArgument(
+            'obj_result_and_output_qos',
+            default_value='DEFAULT',
+            description='Publication QoS profile for the Object Detection Server',
+        )
     ]
 
     object_detection_node = ComposableNode(
@@ -66,7 +86,13 @@ def generate_launch_description():
                 'input_detections_topic_name': LaunchConfiguration(
                     'obj_input_detections_topic_name'),
                 'output_detections_topic_name': LaunchConfiguration(
-                    'obj_output_detections_topic_name')
+                    'obj_output_detections_topic_name'),
+                'input_qos': LaunchConfiguration('obj_input_qos'),
+                'result_and_output_qos': LaunchConfiguration('obj_result_and_output_qos'),
+                'input_camera_info_topic_name': LaunchConfiguration(
+                    'obj_input_camera_info_topic_name'),
+                'output_camera_info_topic_name': LaunchConfiguration(
+                    'obj_output_camera_info_topic_name'),
             }]
     )
 

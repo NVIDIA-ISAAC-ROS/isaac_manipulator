@@ -25,6 +25,7 @@
 #include "isaac_ros_common/qos.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
+#include "rclcpp/parameter_client.hpp"
 #include "sensor_msgs/msg/camera_info.hpp"
 #include "sensor_msgs/msg/image.hpp"
 #include "vision_msgs/msg/detection2_d_array.hpp"
@@ -79,10 +80,12 @@ private:
   std::string out_bbox_topic_name_;
   std::string in_pose_estimate_topic_name_;
   std::string out_pose_estimate_topic_name_;
+  std::string out_segmented_mask_topic_name_;
+  std::string foundation_pose_node_name_;
 
   // QOS for subscriptions and publishers
-  rclcpp::QoS sub_qos_;
-  rclcpp::QoS pub_qos_;
+  rclcpp::QoS input_qos_;
+  rclcpp::QoS result_and_output_qos_;
 
   rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr img_sub_;
   rclcpp::Subscription<sensor_msgs::msg::CameraInfo>::SharedPtr cam_info_sub_;
@@ -94,6 +97,7 @@ private:
   const rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr depth_pub_;
   const rclcpp::Publisher<vision_msgs::msg::Detection2D>::SharedPtr bbox_pub_;
   const rclcpp::Publisher<vision_msgs::msg::Detection3DArray>::SharedPtr pose_estimate_pub_;
+  const rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr segmented_mask_pub_;
 
   sensor_msgs::msg::Image::ConstSharedPtr img_msg_;
   sensor_msgs::msg::CameraInfo::ConstSharedPtr cam_info_msg_;
@@ -103,6 +107,8 @@ private:
 
   rclcpp::CallbackGroup::SharedPtr action_cb_group_;
   rclcpp::CallbackGroup::SharedPtr subscription_cb_group_;
+
+  const rclcpp::AsyncParametersClient::SharedPtr parameter_client_;
 };
 
 }  // namespace manipulation

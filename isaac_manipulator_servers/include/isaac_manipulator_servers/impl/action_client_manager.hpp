@@ -23,11 +23,13 @@
 #include <unordered_map>
 #include <variant>
 
+#include "isaac_manipulator_servers/impl/action_clients.hpp"
+#include "isaac_manipulator_servers/impl/backend_types.hpp"
+#include "isaac_manipulator_interfaces/action/add_segmentation_mask.hpp"
 #include "isaac_manipulator_interfaces/action/detect_objects.hpp"
 #include "isaac_manipulator_interfaces/action/estimate_pose_dope.hpp"
 #include "isaac_manipulator_interfaces/action/estimate_pose_foundation_pose.hpp"
-#include "isaac_manipulator_servers/impl/action_clients.hpp"
-#include "isaac_manipulator_servers/impl/backend_types.hpp"
+#include "isaac_manipulator_interfaces/action/segment_anything.hpp"
 
 namespace nvidia
 {
@@ -36,15 +38,18 @@ namespace isaac
 namespace manipulation
 {
 
+using AddSegmentationMaskAction = isaac_manipulator_interfaces::action::AddSegmentationMask;
 using DetectObjectsAction = isaac_manipulator_interfaces::action::DetectObjects;
 using DopeAction = isaac_manipulator_interfaces::action::EstimatePoseDope;
 using FoundationPoseAction = isaac_manipulator_interfaces::action::EstimatePoseFoundationPose;
+using SegmentAnythingAction = isaac_manipulator_interfaces::action::SegmentAnything;
 
 template<typename ActionType>
 using ActionClientPtr = std::shared_ptr<ActionClient<ActionType>>;
 
 using action_client_variants = std::variant<ActionClientPtr<DetectObjectsAction>,
-    ActionClientPtr<DopeAction>, ActionClientPtr<FoundationPoseAction>>;
+    ActionClientPtr<DopeAction>, ActionClientPtr<FoundationPoseAction>,
+    ActionClientPtr<SegmentAnythingAction>>;
 
 class ActionClientManager
 {

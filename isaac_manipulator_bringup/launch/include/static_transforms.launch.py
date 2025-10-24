@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-# Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,52 +17,112 @@
 
 from typing import List
 
-from isaac_ros_launch_utils.all_types import Action, LaunchDescription
-import isaac_ros_launch_utils as lu
+from isaac_manipulator_ros_python_utils.manipulator_types import CameraType, TrackingType
 
-from isaac_manipulator_ros_python_utils.types import CameraType, TrackingType
+import isaac_ros_launch_utils as lu
+from isaac_ros_launch_utils.all_types import Action, LaunchDescription
+
+
+gear_assembly_transforms_dict = {
+    'gear_assembly_pose_gear_shaft_small_frame': {
+        'parent_frame': 'gear_assembly_frame',
+        'child_frame': 'gear_shaft_small',
+        'translation': [0.082325, 0.0, -0.0188],
+        'rotation': [0.0, 0.0, 0.0, 1.0]
+    },
+    'gear_assembly_pose_gear_shaft_medium_frame': {
+        'parent_frame': 'gear_assembly_frame',
+        'child_frame': 'gear_shaft_medium',
+        'translation': [0.036575, 0.0, -0.0188],
+        'rotation': [0.0, 0.0, 0.0, 1.0]
+    },
+    'gear_assembly_pose_gear_shaft_large_frame': {
+        'parent_frame': 'gear_assembly_frame',
+        'child_frame': 'gear_shaft_large',
+        'translation': [-0.039175, 0.0, -0.0188],
+        'rotation': [0.0, 0.0, 0.0, 1.0]
+    },
+    'object_pose_grasp_frame': {
+        'parent_frame': 'detected_object1',
+        'child_frame': 'goal_frame',
+        'translation': [0.0, 0.0, -0.015],  # Add only Z offset and no rotation.
+        'rotation': [0, 0, 0, 1],  # [qx, qy ,qz, qw]
+    },
+}
 
 # Dictionary containing the calibration of various camera setups.
 # Every item of the dictionary represents the calibration of a single setup
 calibrations_dict = {
-    'hubble_test_bench': {
-        'world_to_hawk': {
-            'parent_frame': 'world',
-            'child_frame': 'hawk',
-            'translation': [-1.75433, -0.0887958, 0.419998],
-            'rotation': [-0.00447052, 0.138631, -0.0101076, 0.990282],  # [qx, qy ,qz, qw]
-        },
-        'world_to_realsense_1': {
-            'parent_frame': 'world',
-            'child_frame': 'camera_1_link',
-            'translation': [-1.51812, 0.321693, 0.567912],
-            'rotation': [0.0271786, 0.171242, -0.36313, 0.915464],  # [qx, qy ,qz, qw]
-        },
-        'world_to_realsense_2': {
+    'rosie_ur10e_test_bench': {
+        'world_pose_realsense_2': {
             'parent_frame': 'world',
             'child_frame': 'camera_2_link',
-            'translation': [-1.47782, -1.23458, 0.533205],
-            'rotation': [-0.0636737, 0.206499, 0.343712, 0.913874],  # [qx, qy ,qz, qw]
+            'translation': [-1.0344, -1.41359, 0.586203],
+            'rotation': [-0.13085, 0.161075, 0.629893, 0.748443],  # [qx, qy ,qz, qw]
         },
-        'world_to_base_link': {
+        'world_pose_realsense_1': {
             'parent_frame': 'world',
-            'child_frame': 'base_link',
-            'translation': [0.0, 0.0, 0.0],
-            'rotation': [0.0, 0.0, 0.0, 1.0],  # [qx, qy ,qz, qw]
+            'child_frame': 'camera_1_link',
+            'translation': [-0.414329, 0.242295, 0.129507],
+            'rotation': [-0.0533118, 0.00148028, 0.998085, -0.0313258],  # [qx, qy ,qz, qw]
         },
-        'object_to_grasp_frame': {
+        'object_pose_grasp_frame': {
             'parent_frame': 'detected_object1',
             'child_frame': 'goal_frame',
             'translation': [0.043, 0.359, 0.065],
             'rotation': [0.553, 0.475, -0.454, 0.513],  # [qx, qy ,qz, qw]
         },
-        'world_to_target_frame_1': {
+        'world_pose_target_frame_1': {
             'parent_frame': 'world',
             'child_frame': 'target1_frame',
             'translation': [-0.7, 0.3, 0.4],
             'rotation': [1.0, 0.0, 0.0, 0.0],  # [qx, qy ,qz, qw]
         },
-        'world_to_target_frame_2': {
+        'world_pose_target_frame_2': {
+            'parent_frame': 'world',
+            'child_frame': 'target2_frame',
+            'translation': [-0.7, -0.3, 0.4],
+            'rotation': [1.0, 0.0, 0.0, 0.0],  # [qx, qy ,qz, qw]
+        },
+    },
+    'hubble_ur10e_test_bench': {
+        'world_pose_realsense_1': {
+            'parent_frame': 'world',
+            'child_frame': 'camera_1_link',
+            'translation': [-1.24786, 0.22986, 0.262594],
+            'rotation': [-0.00930892, 0.482916, 0.0158122, 0.875474],  # [qx, qy ,qz, qw]
+        },
+        'world_pose_realsense_2': {
+            'parent_frame': 'world',
+            'child_frame': 'camera_2_link',
+            'translation': [-1.62286, 0.704411, 0.451326],
+            'rotation': [0.0595995, 0.157255, -0.300931, 0.938701],  # [qx, qy ,qz, qw]
+        },
+        'world_pose_realsense_3': {
+            'parent_frame': 'world',
+            'child_frame': 'camera_3_link',
+            'translation': [-1.64437, -0.43066, 0.452024],
+            'rotation': [0.0286703, 0.169328, 0.152123, 0.973326],  # [qx, qy ,qz, qw]
+        },
+        'world_pose_base_link': {
+            'parent_frame': 'world',
+            'child_frame': 'base_link',
+            'translation': [0.0, 0.0, 0.0],
+            'rotation': [0.0, 0.0, 0.0, 1.0],  # [qx, qy ,qz, qw]
+        },
+        'object_pose_grasp_frame': {
+            'parent_frame': 'detected_object1',
+            'child_frame': 'goal_frame',
+            'translation': [0.043, 0.359, 0.065],
+            'rotation': [0.553, 0.475, -0.454, 0.513],  # [qx, qy ,qz, qw]
+        },
+        'world_pose_target_frame_1': {
+            'parent_frame': 'world',
+            'child_frame': 'target1_frame',
+            'translation': [-0.7, 0.3, 0.4],
+            'rotation': [1.0, 0.0, 0.0, 0.0],  # [qx, qy ,qz, qw]
+        },
+        'world_pose_target_frame_2': {
             'parent_frame': 'world',
             'child_frame': 'target2_frame',
             'translation': [-0.7, -0.3, 0.4],
@@ -70,43 +130,37 @@ calibrations_dict = {
         },
     },
     'zurich_test_bench': {
-        'world_to_hawk': {
-            'parent_frame': 'world',
-            'child_frame': 'hawk',
-            'translation': [-0.646121, 0.634906, 0.657998],
-            'rotation': [0.0647987, 0.0853649, -0.5974046, 0.794747],  # [qx, qy ,qz, qw]
-        },
-        'world_to_realsense_1': {
+        'world_pose_realsense_1': {
             'parent_frame': 'world',
             'child_frame': 'camera_1_link',
             'translation': [2.131679, 0.563435, 0.775389],
             'rotation': [-0.324828, 0.001799, 0.945766, -0.002907],  # [qx, qy ,qz, qw]
         },
-        'world_to_realsense_2': {
+        'world_pose_realsense_2': {
             'parent_frame': 'world',
             'child_frame': 'camera_2_link',
             'translation': [-0.250322, 0.598947, 0.864349],
             'rotation': [0.039936, 0.349054, -0.058430, 0.934426],  # [qx, qy ,qz, qw]
         },
-        'world_to_base_link': {
+        'world_pose_base_link': {
             'parent_frame': 'world',
             'child_frame': 'base_link',
             'translation': [0.0, 0.0, 0.0],
             'rotation': [0.0, 0.0, 0.0, 1.0],  # [qx, qy ,qz, qw]
         },
-        'object_to_grasp_frame': {
+        'object_pose_grasp_frame': {
             'parent_frame': 'detected_object1',
             'child_frame': 'goal_frame',
             'translation': [0.043, 0.359, 0.065],
             'rotation': [0.553, 0.475, -0.454, 0.513],  # [qx, qy ,qz, qw]
         },
-        'world_to_target_frame_1': {
+        'world_pose_target_frame_1': {
             'parent_frame': 'world',
             'child_frame': 'target1_frame',
             'translation': [-0.7, 0.3, 0.4],
             'rotation': [1.0, 0.0, 0.0, 0.0],  # [qx, qy ,qz, qw]
         },
-        'world_to_target_frame_2': {
+        'world_pose_target_frame_2': {
             'parent_frame': 'world',
             'child_frame': 'target2_frame',
             'translation': [-0.7, -0.3, 0.4],
@@ -114,52 +168,78 @@ calibrations_dict = {
         },
     },
     'hubble_ur5e_test_bench': {
-        'world_to_base_link': {
+        'world_pose_base_link': {
             'parent_frame': 'world',
             'child_frame': 'base_link',
             'translation': [0.0, 0.0, 0.0],
             'rotation': [0.0, 0.0, 0.0, 1.0],  # [qx, qy ,qz, qw]
         },
-        'world_to_hawk': {
-            'parent_frame': 'world',
-            'child_frame': 'hawk',
-            'translation': [-0.646121, 0.634906, 0.657998],
-            'rotation': [0.0647987, 0.0853649, -0.597404, 0.794747],  # [qx, qy ,qz, qw]
-        },
-        'world_to_hawk_2': {
-            'parent_frame': 'world',
-            'child_frame': 'hawk_2',
-            'translation': [0.00717077, 0.73, 0.524834],
-            'rotation': [-0.09738, -0.0599994, 0.870336, -0.478991],  # [qx, qy ,qz, qw]
-        },
-        'world_to_realsense_2': {
+        'world_pose_realsense_2': {
             'parent_frame': 'world',
             'child_frame': 'camera_2_link',
-            'translation': [0.0442943, 0.821461, 0.521577],
-            'rotation': [-0.103339, -0.0650548, 0.881767, -0.455604],  # [qx, qy ,qz, qw]
+            'translation': [-0.751471, 0.649335, 0.506522],
+            'rotation': [0.0433558, 0.140372, -0.509666, 0.847736],  # [qx, qy ,qz, qw]
         },
-        'world_to_realsense_1': {
+        'world_pose_realsense_1': {
             'parent_frame': 'world',
             'child_frame': 'camera_1_link',
-            'translation': [-1.3285, 0.563134, 0.383402],
-            'rotation': [0.0157158, 0.01767, -0.308705, 0.950864],  # [qx, qy ,qz, qw]
+            'translation': [-0.651394, -0.763559, 0.342156],
+            'rotation': [-0.031729, 0.0792618, 0.653756, 0.751874],  # [qx, qy ,qz, qw]
         },
-        'object_to_grasp_frame': {
+        'object_pose_grasp_frame': {
             'parent_frame': 'detected_object1',
             'child_frame': 'goal_frame',
             'translation': [0.043, 0.359, 0.065],
             'rotation': [0.553, 0.475, -0.454, 0.513],  # [qx, qy ,qz, qw]
         },
-        'world_to_target_frame_1': {
+        'world_pose_target_frame_1': {
             'parent_frame': 'world',
             'child_frame': 'target1_frame',
             'translation': [-0.7, 0.3, 0.4],
             'rotation': [1.0, 0.0, 0.0, 0.0],  # [qx, qy ,qz, qw]
         },
-        'world_to_target_frame_2': {
+        'world_pose_target_frame_2': {
             'parent_frame': 'world',
             'child_frame': 'target2_frame',
             'translation': [-0.7, -0.3, 0.4],
+            'rotation': [1.0, 0.0, 0.0, 0.0],  # [qx, qy ,qz, qw]
+        },
+    },
+    'galileo_ur10e_test_bench': {
+        'world_pose_realsense_1': {
+            'parent_frame': 'world',
+            'child_frame': 'camera_1_link',
+            'translation': [-0.48429, 1.15513, 0.452704],
+            'rotation': [0.0879499, 0.18293, -0.480816, 0.853005],  # [qx, qy ,qz, qw]
+        },
+        'world_pose_realsense_2': {
+            'parent_frame': 'world',
+            'child_frame': 'camera_2_link',
+            'translation': [0.32545, 1.14985, 0.331019],
+            'rotation': [0.148563, 0.0800837, -0.741462, 0.649423],  # [qx, qy ,qz, qw]
+        },
+        'world_pose_base_link': {
+            'parent_frame': 'world',
+            'child_frame': 'base_link',
+            'translation': [0.0, 0.0, 0.0],
+            'rotation': [0.0, 0.0, 0.0, 1.0],  # [qx, qy ,qz, qw]
+        },
+        'object_pose_grasp_frame': {
+            'parent_frame': 'detected_object1',
+            'child_frame': 'goal_frame',
+            'translation': [0.043, 0.359, 0.065],
+            'rotation': [0.553, 0.475, -0.454, 0.513],  # [qx, qy ,qz, qw]
+        },
+        'world_pose_target_frame_1': {
+            'parent_frame': 'world',
+            'child_frame': 'target1_frame',
+            'translation': [-0.4, 0.6, 0.2],
+            'rotation': [1.0, 0.0, 0.0, 0.0],  # [qx, qy ,qz, qw]
+        },
+        'world_pose_target_frame_2': {
+            'parent_frame': 'world',
+            'child_frame': 'target2_frame',
+            'translation': [0.2, 0.6, 0.2],
             'rotation': [1.0, 0.0, 0.0, 0.0],  # [qx, qy ,qz, qw]
         },
     },
@@ -181,38 +261,59 @@ def add_static_transforms(args: lu.ArgumentContainer) -> List[Action]:
     broadcast_world_base_link = bool(args.broadcast_world_base_link)
 
     # Get the calibration dict
-    if args.calibration_name not in calibrations_dict:
+    if args.calibration_name not in calibrations_dict and camera_type is not CameraType.ISAAC_SIM:
         return [
             lu.log_info([
                 "Calibration with name '",
                 str(args.calibration_name), "' does not exits. Not loading static transforms."
             ])
         ]
-    transforms = calibrations_dict[args.calibration_name]
 
     actions = []
+    if camera_type is CameraType.ISAAC_SIM:
+        actions.append(
+            static_transform_from_dict(
+                gear_assembly_transforms_dict['gear_assembly_pose_gear_shaft_small_frame']))
+        actions.append(
+            static_transform_from_dict(
+                gear_assembly_transforms_dict['gear_assembly_pose_gear_shaft_medium_frame']))
+        actions.append(
+            static_transform_from_dict(
+                gear_assembly_transforms_dict['gear_assembly_pose_gear_shaft_large_frame']))
+        return actions
+
+    transforms = calibrations_dict[args.calibration_name]
+
     # Get world transform
     if broadcast_world_base_link:
-        actions.append(static_transform_from_dict(transforms['world_to_base_link']))
+        actions.append(static_transform_from_dict(transforms['world_pose_base_link']))
 
     # Get camera transforms
-    if camera_type is CameraType.hawk:
-        actions.append(static_transform_from_dict(transforms['world_to_hawk']))
-    elif camera_type is CameraType.realsense:
-        actions.append(static_transform_from_dict(transforms['world_to_realsense_1']))
+    if camera_type is CameraType.REALSENSE:
+        actions.append(static_transform_from_dict(transforms['world_pose_realsense_1']))
         if num_cameras > 1:
-            actions.append(static_transform_from_dict(transforms['world_to_realsense_2']))
+            actions.append(static_transform_from_dict(transforms['world_pose_realsense_2']))
             assert num_cameras <= 2, 'Running more than 2 cameras not allowed.'
     else:
         raise Exception(f'CameraType {camera_type} not implemented.')
 
     # Get target and grasp frames
-    if tracking_type is TrackingType.follow_object:
-        actions.append(static_transform_from_dict(transforms['object_to_grasp_frame']))
-    elif tracking_type is TrackingType.pose_to_pose:
-        actions.append(static_transform_from_dict(transforms['world_to_target_frame_1']))
-        actions.append(static_transform_from_dict(transforms['world_to_target_frame_2']))
-    elif tracking_type is not TrackingType.none:
+    if tracking_type is TrackingType.OBJECT_FOLLOWING:
+        actions.append(static_transform_from_dict(transforms['object_pose_grasp_frame']))
+    elif tracking_type is TrackingType.GEAR_ASSEMBLY:
+        actions.append(
+            static_transform_from_dict(
+                gear_assembly_transforms_dict['gear_assembly_pose_gear_shaft_small_frame']))
+        actions.append(
+            static_transform_from_dict(
+                gear_assembly_transforms_dict['gear_assembly_pose_gear_shaft_medium_frame']))
+        actions.append(
+            static_transform_from_dict(
+                gear_assembly_transforms_dict['gear_assembly_pose_gear_shaft_large_frame']))
+    elif tracking_type is TrackingType.POSE_TO_POSE:
+        actions.append(static_transform_from_dict(transforms['world_pose_target_frame_1']))
+        actions.append(static_transform_from_dict(transforms['world_pose_target_frame_2']))
+    elif tracking_type is not TrackingType.NONE:
         raise Exception(f'TrackingType {tracking_type} not implemented.')
 
     actions.append(

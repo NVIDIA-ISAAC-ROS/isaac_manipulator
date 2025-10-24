@@ -19,10 +19,13 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 
-from isaac_ros_launch_utils.all_types import ComposableNode, \
-    DeclareLaunchArgument, GroupAction, IncludeLaunchDescription, LaunchConfiguration, \
-    LoadComposableNodes, LaunchDescription, PythonLaunchDescriptionSource
 import isaac_manipulator_ros_python_utils.constants as constants
+
+from isaac_ros_launch_utils.all_types import (
+    ComposableNode, DeclareLaunchArgument, GroupAction,
+    IncludeLaunchDescription, LaunchConfiguration, LaunchDescription,
+    LoadComposableNodes, PythonLaunchDescriptionSource
+)
 
 
 def generate_launch_description():
@@ -86,8 +89,8 @@ def generate_launch_description():
             description='QOS setting used for DOPE input'),
     ]
 
-    image_input_topic = LaunchConfiguration("image_input_topic")
-    camera_info_input_topic = LaunchConfiguration("camera_info_input_topic")
+    image_input_topic = LaunchConfiguration('image_input_topic')
+    camera_info_input_topic = LaunchConfiguration('camera_info_input_topic')
 
     # DNN Image Encoder parameters
     input_image_width = LaunchConfiguration('input_image_width', default='1920')
@@ -140,7 +143,7 @@ def generate_launch_description():
             'network_image_width': dope_network_image_width,
             'network_image_height': dope_network_image_height,
             'input_qos': dope_input_qos,
-            'output_qos': 'DEFAULT',
+            'output_qos': dope_input_qos,
             'image_mean': encoder_image_mean,
             'image_stddev': encoder_image_stddev,
             'attach_to_shared_component_container': 'True',
@@ -158,12 +161,16 @@ def generate_launch_description():
         package='isaac_ros_nitros_topic_tools',
         plugin='nvidia::isaac_ros::nitros::NitrosCameraDropNode',
         parameters=[{
-            'input_qos': dope_input_qos,
-            'output_qos': dope_input_qos,
             'X': dropped_fps,
             'Y': input_fps,
             'mode': 'mono',
-            'sync_queue_size': 100
+            'input_qos': dope_input_qos,
+            'output_qos': dope_input_qos,
+            'input_queue_size': 1,
+            'output_queue_size': 1,
+            'sync_queue_size': 5,
+            'max_latency_threshold': 0.1,
+            'enforce_max_latency': True,
         }],
         remappings=[
             ('image_1', image_input_topic),
@@ -186,6 +193,8 @@ def generate_launch_description():
             'output_tensor_names': output_tensor_names,
             'output_binding_names': output_binding_names,
             'verbose': tensorrt_verbose,
+            'input_qos': dope_input_qos,
+            'output_qos': dope_input_qos,
             'force_engine_update': force_engine_update
         }])
 
@@ -200,7 +209,7 @@ def generate_launch_description():
             'tf_frame_name': 'detected_object',
             'rotation_y_axis': rotation_y_axis,
             'rotation_x_axis': rotation_x_axis,
-            'rotation_z_axis': rotation_z_axis
+            'rotation_z_axis': rotation_z_axis,
         }],
         remappings=[('belief_map_array', 'tensor_sub'),
                     ('dope/detections', 'detections'),
@@ -212,7 +221,7 @@ def generate_launch_description():
         package='isaac_ros_pose_proc',
         plugin='nvidia::isaac_ros::pose_proc::Detection3DArrayToPoseNode',
         parameters=[{
-            'desired_class_id': object_name
+            'desired_class_id': object_name,
         }],
         remappings=[('detection3_d_array_input', 'detections'),
                     ('pose_output', 'selected_pose')]

@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>isaac_manipulator_orchestration</name>
+  <version>4.0.0</version>
+  <description>Reference orchestration package for Isaac Manipulator</description>
+  <maintainer email="isaac-ros-maintainers@nvidia.com">Isaac ROS Maintainers</maintainer>
+  <license>Apache-2.0</license>
+  <url type="website">https://developer.nvidia.com/isaac-ros-gems/</url>
+  <author>Animesh Singhal</author>
+  <author>Swapnesh Wani</author>
+
+  <depend>isaac_manipulator_ros_python_utils</depend>
+  <depend>isaac_manipulator_interfaces</depend>
+  <depend>isaac_manipulator_robot_description</depend>
+  <depend>isaac_ros_cumotion_interfaces</depend>
+  <depend>isaac_ros_test</depend>
+  <depend>py_trees</depend>
+  <depend>py_trees_ros</depend>
+  <depend>py_trees_ros_viewer</depend>
+  <depend>rclpy</depend>
+
+  <exec_depend>ros2launch</exec_depend>
+
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>isaac_manipulator_test_utils</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

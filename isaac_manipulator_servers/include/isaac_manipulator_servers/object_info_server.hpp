@@ -24,17 +24,23 @@
 #include <unordered_map>
 #include <variant>
 
+#include "isaac_manipulator_interfaces/action/add_segmentation_mask.hpp"
 #include "isaac_manipulator_interfaces/action/detect_objects.hpp"
 #include "isaac_manipulator_interfaces/action/estimate_pose_dope.hpp"
 #include "isaac_manipulator_interfaces/action/estimate_pose_foundation_pose.hpp"
 #include "isaac_manipulator_interfaces/action/get_objects.hpp"
 #include "isaac_manipulator_interfaces/action/get_object_pose.hpp"
+#include "isaac_manipulator_interfaces/action/segment_anything.hpp"
+#include "isaac_manipulator_interfaces/srv/add_mesh_to_object.hpp"
+#include "isaac_manipulator_interfaces/srv/assign_name_to_object.hpp"
 #include "isaac_manipulator_interfaces/srv/clear_objects.hpp"
 #include "isaac_manipulator_servers/impl/action_clients.hpp"
 #include "isaac_manipulator_servers/impl/action_client_manager.hpp"
 #include "isaac_manipulator_servers/impl/backend_manager.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
+#include "vision_msgs/msg/bounding_box2_d.hpp"
+#include "vision_msgs/msg/point2_d.hpp"
 
 namespace nvidia
 {
@@ -45,6 +51,11 @@ namespace manipulation
 
 using GetObjectPoseAction = isaac_manipulator_interfaces::action::GetObjectPose;
 using GetObjectsAction = isaac_manipulator_interfaces::action::GetObjects;
+using AddSegmentationMaskAction = isaac_manipulator_interfaces::action::AddSegmentationMask;
+
+using AddMeshToObjectSrv = isaac_manipulator_interfaces::srv::AddMeshToObject;
+using ClearObjectsSrv = isaac_manipulator_interfaces::srv::ClearObjects;
+using AssignNameToObjectSrv = isaac_manipulator_interfaces::srv::AssignNameToObject;
 
 class ObjectInfoServer : public rclcpp::Node
 {
@@ -71,24 +82,40 @@ private:
 
   void RegisterActionClients(ObjectDetectionBackend backend);
 
+  void RegisterActionClients(SegmentationBackend backend);
+
   template<typename ActionType, typename BackendType>
   std::optional<typename ActionType::Result::SharedPtr> Trigger(
     const typename ActionType::Goal & goal);
 
   void ClearObjects(
-    const std::shared_ptr<isaac_manipulator_interfaces::srv::ClearObjects::Request> request,
-    std::shared_ptr<isaac_manipulator_interfaces::srv::ClearObjects::Response> response);
+    const std::shared_ptr<ClearObjectsSrv::Request> request,
+    std::shared_ptr<ClearObjectsSrv::Response> response);
+
+  void AddMeshToObject(
+    const std::shared_ptr<AddMeshToObjectSrv::Request> request,
+    std::shared_ptr<AddMeshToObjectSrv::Response> response);
+
+  void AssignNameToObject(
+    const std::shared_ptr<AssignNameToObjectSrv::Request> request,
+    std::shared_ptr<AssignNameToObjectSrv::Response> response);
 
 private:
+  std::mutex objects_mutex_;
+
   rclcpp_action::Server<GetObjectsAction>::SharedPtr get_objects_server_;
   rclcpp_action::Server<GetObjectPoseAction>::SharedPtr object_info_server_;
-  rclcpp::Service<isaac_manipulator_interfaces::srv::ClearObjects>::SharedPtr clear_objects_;
+  rclcpp_action::Server<AddSegmentationMaskAction>::SharedPtr segmentation_server_;
+  rclcpp::Service<ClearObjectsSrv>::SharedPtr clear_objects_;
+  rclcpp::Service<AddMeshToObjectSrv>::SharedPtr add_mesh_objects_;
+  rclcpp::Service<AssignNameToObjectSrv>::SharedPtr assign_name_to_object_;
   std::unordered_map<int, isaac_manipulator_interfaces::msg::ObjectInfo> objects_;
 
   std::shared_ptr<ActionClientManager> action_client_manager_;
 
   std::string pose_estimation_backend_;
   std::string object_detection_backend_;
+  std::string segmentation_backend_;
   std::shared_ptr<BackendManager> backend_manager_;
 
   std::shared_ptr<rclcpp::ParameterEventHandler> param_event_handler_;
@@ -99,7 +126,10 @@ private:
   rclcpp::CallbackGroup::SharedPtr estimate_pose_fp_cb_group_;
   rclcpp::CallbackGroup::SharedPtr estimate_pose_dope_cb_group_;
   rclcpp::CallbackGroup::SharedPtr detect_objects_cb_group_;
+  rclcpp::CallbackGroup::SharedPtr segmentation_cb_group_;
   rclcpp::CallbackGroup::SharedPtr clear_objects_cb_group_;
+  rclcpp::CallbackGroup::SharedPtr add_mesh_objects_cb_group_;
+  rclcpp::CallbackGroup::SharedPtr assign_name_to_object_cb_group_;
 };
 
 }  // namespace manipulation

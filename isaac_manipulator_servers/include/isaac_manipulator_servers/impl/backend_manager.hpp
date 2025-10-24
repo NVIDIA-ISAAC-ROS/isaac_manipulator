@@ -32,7 +32,8 @@ namespace isaac
 namespace manipulation
 {
 
-using backend_variants = std::variant<ObjectDetectionBackend, PoseEstimationBackend>;
+using backend_variants = std::variant<ObjectDetectionBackend, PoseEstimationBackend,
+    SegmentationBackend>;
 
 class BackendManager
 {
@@ -68,10 +69,38 @@ BackendType BackendManager::GetBackend() const
 
 bool BackendManager::ValidateBackendConfig() const
 {
-  return (GetBackend<PoseEstimationBackend>() == PoseEstimationBackend::FOUNDATION_POSE &&
-         GetBackend<ObjectDetectionBackend>() == ObjectDetectionBackend::RT_DETR) ||
-         (GetBackend<PoseEstimationBackend>() == PoseEstimationBackend::DOPE &&
-         GetBackend<ObjectDetectionBackend>() == ObjectDetectionBackend::DOPE);
+  try {
+    return (GetBackend<PoseEstimationBackend>() == PoseEstimationBackend::FOUNDATION_POSE &&
+           GetBackend<ObjectDetectionBackend>() == ObjectDetectionBackend::RT_DETR) ||
+           (GetBackend<PoseEstimationBackend>() == PoseEstimationBackend::FOUNDATION_POSE &&
+           GetBackend<ObjectDetectionBackend>() == ObjectDetectionBackend::GROUNDING_DINO) ||
+           (GetBackend<PoseEstimationBackend>() == PoseEstimationBackend::DOPE &&
+           GetBackend<ObjectDetectionBackend>() == ObjectDetectionBackend::DOPE) ||
+           (GetBackend<PoseEstimationBackend>() == PoseEstimationBackend::FOUNDATION_POSE &&
+           GetBackend<SegmentationBackend>() == SegmentationBackend::SEGMENT_ANYTHING &&
+           GetBackend<ObjectDetectionBackend>() == ObjectDetectionBackend::RT_DETR) ||
+           (GetBackend<PoseEstimationBackend>() == PoseEstimationBackend::FOUNDATION_POSE &&
+           GetBackend<SegmentationBackend>() == SegmentationBackend::SEGMENT_ANYTHING &&
+           GetBackend<ObjectDetectionBackend>() == ObjectDetectionBackend::GROUNDING_DINO) ||
+           (GetBackend<PoseEstimationBackend>() == PoseEstimationBackend::FOUNDATION_POSE &&
+           GetBackend<SegmentationBackend>() == SegmentationBackend::SEGMENT_ANYTHING &&
+           GetBackend<ObjectDetectionBackend>() == ObjectDetectionBackend::SEGMENT_ANYTHING) ||
+           (GetBackend<PoseEstimationBackend>() == PoseEstimationBackend::FOUNDATION_POSE &&
+           GetBackend<SegmentationBackend>() == SegmentationBackend::SEGMENT_ANYTHING2 &&
+           GetBackend<ObjectDetectionBackend>() == ObjectDetectionBackend::RT_DETR) ||
+           (GetBackend<PoseEstimationBackend>() == PoseEstimationBackend::FOUNDATION_POSE &&
+           GetBackend<SegmentationBackend>() == SegmentationBackend::SEGMENT_ANYTHING2 &&
+           GetBackend<ObjectDetectionBackend>() == ObjectDetectionBackend::GROUNDING_DINO) ||
+           (GetBackend<PoseEstimationBackend>() == PoseEstimationBackend::FOUNDATION_POSE &&
+           GetBackend<SegmentationBackend>() == SegmentationBackend::SEGMENT_ANYTHING2 &&
+           GetBackend<ObjectDetectionBackend>() == ObjectDetectionBackend::SEGMENT_ANYTHING2);
+  } catch (const std::out_of_range &) {
+    // If a backend type is not found in the map, return false
+    return false;
+  } catch (const std::bad_variant_access &) {
+    // If a backend type is not in the variant, return false
+    return false;
+  }
 }
 
 }  // namespace manipulation

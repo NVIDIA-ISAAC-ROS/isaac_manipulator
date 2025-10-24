@@ -21,7 +21,7 @@ SPDX-License-Identifier: Apache-2.0
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>isaac_manipulator_bringup</name>
-  <version>3.2.13</version>
+  <version>4.0.0</version>
   <description>Reference example package for Isaac Manipulator</description>
   <maintainer email="isaac-ros-maintainers@nvidia.com">Isaac ROS Maintainers</maintainer>
   <license>Apache-2.0</license>
@@ -29,34 +29,56 @@ SPDX-License-Identifier: Apache-2.0
   <author>Kajanan Chinniah</author>
   <author>Swapnesh Wani</author>
 
+  <depend>isaac_manipulator_asset_bringup</depend>
   <depend>isaac_manipulator_ros_python_utils</depend>
+  <depend>isaac_manipulator_orchestration</depend>
+  <depend>isaac_manipulator_pick_and_place</depend>
+  <depend>isaac_manipulator_robot_description</depend>
+  <depend>isaac_manipulator_ur_dnn_policy</depend>
+  <depend>isaac_manipulator_gear_assembly</depend>
+  <depend>isaac_manipulator_isaac_sim_utils</depend>
   <depend>isaac_ros_cumotion</depend>
   <depend>isaac_ros_cumotion_examples</depend>
   <depend>isaac_ros_cumotion_interfaces</depend>
   <depend>isaac_ros_cumotion_moveit</depend>
   <depend>isaac_ros_cumotion_object_attachment</depend>
+  <depend>isaac_ros_depth_image_proc</depend>
   <depend>isaac_ros_dope</depend>
   <depend>isaac_ros_esdf_visualizer</depend>
   <depend>isaac_ros_ess</depend>
+  <depend>isaac_ros_foundationstereo</depend>
   <depend>isaac_ros_foundationpose</depend>
-  <depend>isaac_ros_hawk</depend>
+  <depend>isaac_ros_grounding_dino</depend>
   <depend>isaac_ros_image_proc</depend>
   <depend>isaac_ros_launch_utils</depend>
   <depend>isaac_ros_moveit_goal_setter</depend>
+  <depend>isaac_ros_nitros_bridge_ros2</depend>
   <depend>isaac_ros_nitros_topic_tools</depend>
   <depend>isaac_ros_pose_proc</depend>
   <depend>isaac_ros_rtdetr</depend>
+  <depend>isaac_ros_segment_anything</depend>
+  <depend>isaac_ros_segment_anything2</depend>
   <depend>isaac_ros_tensor_proc</depend>
+  <depend>isaac_ros_triton</depend>
   <depend>nvblox_ros</depend>
   <depend>nvblox_examples_bringup</depend>
   <depend>ros2launch</depend>
-  <depend>tf2_ros</depend>
-  <depend>ur_moveit_config</depend>
+  <depend>ur</depend>
+
+  <exec_depend>realsense2_camera</exec_depend>
+  <exec_depend>rqt_image_view</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
 
   <test_depend>isaac_ros_test_cmake</test_depend>
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
 
   <build_depend>isaac_ros_common</build_depend>
   <build_depend>isaac_ros_ess_models_install</build_depend>
+  <build_depend>isaac_ros_foundationpose_models_install</build_depend>
+  <build_depend>isaac_ros_foundationstereo_models_install</build_depend>
+  <build_depend>isaac_ros_rtdetr_models_install</build_depend>
+  <build_depend>isaac_ros_grounding_dino_models_install</build_depend>
 
   <export>
     <build_type>ament_cmake</build_type>
