@@ -15,9 +15,19 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include <chrono>
 
 #include "isaac_manipulator_servers/foundation_pose_server.hpp"
 
+
+namespace
+{
+const std::chrono::nanoseconds PARAMETER_SERVICE_TIMEOUT = std::chrono::seconds(1);
+bool ServiceAvailable(const rclcpp::AsyncParametersClient::SharedPtr & parameter_client)
+{
+  return parameter_client->wait_for_service(PARAMETER_SERVICE_TIMEOUT);
+}
+}  // namespace
 
 namespace nvidia
 {
@@ -45,21 +55,34 @@ FoundationPoseServer::FoundationPoseServer(const rclcpp::NodeOptions & options)
       "in_pose_estimate_topic_name", "poses")),
   out_pose_estimate_topic_name_(declare_parameter<std::string>(
       "out_pose_estimate_topic_name", "foundation_pose_server/poses")),
-  sub_qos_{::isaac_ros::common::AddQosParameter(*this, "SENSOR_DATA", "sub_qos")},
-  pub_qos_{::isaac_ros::common::AddQosParameter(*this, "SENSOR_DATA", "pub_qos")},
-  img_pub_(create_publisher<sensor_msgs::msg::Image>(out_img_topic_name_, pub_qos_)),
+  out_segmented_mask_topic_name_(declare_parameter<std::string>(
+      "out_segmented_mask_topic_name", "foundation_pose_server/segmented_mask")),
+  foundation_pose_node_name_(declare_parameter<std::string>(
+      "foundation_pose_node_name", "/foundationpose_node")),
+  input_qos_{::isaac_ros::common::AddQosParameter(*this, "SENSOR_DATA", "input_qos")},
+  result_and_output_qos_{::isaac_ros::common::AddQosParameter(
+      *this, "DEFAULT", "result_and_output_qos")},
+  img_pub_(create_publisher<sensor_msgs::msg::Image>(
+      out_img_topic_name_, result_and_output_qos_)),
   cam_info_pub_(
-    create_publisher<sensor_msgs::msg::CameraInfo>(out_camera_info_topic_name_, pub_qos_)),
-  depth_pub_(create_publisher<sensor_msgs::msg::Image>(out_depth_topic_name_, pub_qos_)),
-  bbox_pub_(create_publisher<vision_msgs::msg::Detection2D>(out_bbox_topic_name_, pub_qos_)),
+    create_publisher<sensor_msgs::msg::CameraInfo>(
+      out_camera_info_topic_name_, result_and_output_qos_)),
+  depth_pub_(create_publisher<sensor_msgs::msg::Image>(
+      out_depth_topic_name_, result_and_output_qos_)),
+  bbox_pub_(create_publisher<vision_msgs::msg::Detection2D>(
+      out_bbox_topic_name_, result_and_output_qos_)),
   pose_estimate_pub_(create_publisher<vision_msgs::msg::Detection3DArray>(
-      out_pose_estimate_topic_name_, pub_qos_)),
+      out_pose_estimate_topic_name_, result_and_output_qos_)),
+  segmented_mask_pub_(create_publisher<sensor_msgs::msg::Image>(
+      out_segmented_mask_topic_name_, result_and_output_qos_)),
   img_msg_(nullptr),
   cam_info_msg_(nullptr),
   depth_msg_(nullptr),
   pose_estimate_msg_(nullptr),
   action_cb_group_(create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive)),
-  subscription_cb_group_(create_callback_group(rclcpp::CallbackGroupType::Reentrant))
+  subscription_cb_group_(create_callback_group(rclcpp::CallbackGroupType::Reentrant)),
+  parameter_client_(std::make_shared<rclcpp::AsyncParametersClient>(this,
+        foundation_pose_node_name_))
 {
   action_server_ = rclcpp_action::create_server<EstimatePoseFoundationPose>(
     this,
@@ -75,19 +98,20 @@ FoundationPoseServer::FoundationPoseServer(const rclcpp::NodeOptions & options)
   sub_options.callback_group = subscription_cb_group_;
 
   img_sub_ = create_subscription<sensor_msgs::msg::Image>(
-    in_img_topic_name_, sub_qos_,
+    in_img_topic_name_, input_qos_,
     std::bind(&FoundationPoseServer::CallbackImg, this, std::placeholders::_1),
     sub_options);
   cam_info_sub_ = create_subscription<sensor_msgs::msg::CameraInfo>(
-    in_camera_info_topic_name_, sub_qos_,
+    in_camera_info_topic_name_, input_qos_,
     std::bind(&FoundationPoseServer::CallbackCameraInfo, this, std::placeholders::_1),
     sub_options);
   depth_sub_ = create_subscription<sensor_msgs::msg::Image>(
-    in_depth_topic_name_, sub_qos_,
+    in_depth_topic_name_, input_qos_,
     std::bind(&FoundationPoseServer::CallbackDepth, this, std::placeholders::_1),
     sub_options);
+  // We make this same as pub qos as that is input of the result of the computation.
   pose_estimate_sub_ = create_subscription<vision_msgs::msg::Detection3DArray>(
-    in_pose_estimate_topic_name_, sub_qos_,
+    in_pose_estimate_topic_name_, result_and_output_qos_,
     std::bind(&FoundationPoseServer::CallbackPoseEstimate, this, std::placeholders::_1),
     sub_options);
 }
@@ -124,12 +148,14 @@ void FoundationPoseServer::Execute(
 {
   auto goal = goal_handle->get_goal();
   auto bbox_msg = goal->roi;
+  auto segmentation_mask_msg = goal->segmentation_mask;
   auto header = std_msgs::msg::Header();
-  header.stamp.sec = bbox_msg.header.stamp.sec;
-  header.stamp.nanosec = bbox_msg.header.stamp.nanosec;
+  // This is important that the header contains latest timestamp as the foundation pose will
+  // discard input that is older than X seconds to retain real time functionality.
+  header.stamp = this->now();
+
   RCLCPP_INFO(
-    get_logger(), "ROI Header timestamp  {%d.%d}.", header.stamp.sec,
-    bbox_msg.header.stamp.nanosec);
+    get_logger(), "ROI Header timestamp  {%d.%d}.", header.stamp.sec, header.stamp.nanosec);
 
   auto result = std::make_shared<EstimatePoseFoundationPose::Result>();
   RCLCPP_INFO(get_logger(), "Executing goal");
@@ -146,6 +172,35 @@ void FoundationPoseServer::Execute(
     return;
   }
 
+  std::vector<rclcpp::Parameter> parameters;
+  if (!goal->mesh_file_path.empty()) {
+    parameters.push_back(rclcpp::Parameter("mesh_file_path", goal->mesh_file_path));
+  }
+  if (!goal->object_frame_name.empty()) {
+    parameters.push_back(rclcpp::Parameter("tf_frame_name", goal->object_frame_name));
+  }
+
+  if (ServiceAvailable(parameter_client_) && !parameters.empty()) {
+    auto callback = [this, goal_handle, result]
+      (std::shared_future<std::vector<rcl_interfaces::msg::SetParametersResult>>
+      future) {
+        for (const auto & set_parameters_result : future.get()) {
+          if (!set_parameters_result.successful) {
+            RCLCPP_ERROR(this->get_logger(),
+                  "Failed to set parameters for foundation pose node. Reason: %s",
+                  set_parameters_result.reason.c_str());
+            goal_handle->abort(result);
+            return;
+          }
+        }
+        RCLCPP_INFO(this->get_logger(), "Parameters set successfully for foundation pose node.");
+      };
+    // Trigger FoundationPose parameter service to set the mesh resource
+    auto set_parameters_future = parameter_client_->set_parameters(parameters, callback);
+    // Wait for the parameters to be set
+    set_parameters_future.wait_for(PARAMETER_SERVICE_TIMEOUT);
+  }
+
   if (img_msg_ != nullptr) {
     auto img_msg = *img_msg_;
     img_msg.header.stamp = header.stamp;
@@ -153,6 +208,9 @@ void FoundationPoseServer::Execute(
     img_pub_->publish(img_msg);
     // Reset the image for the next request.
     img_msg_.reset();
+    RCLCPP_INFO(get_logger(), "FP: Published image");
+  } else {
+    RCLCPP_ERROR(get_logger(), "FP: Image is null");
   }
 
   if (cam_info_msg_ != nullptr) {
@@ -162,6 +220,9 @@ void FoundationPoseServer::Execute(
     cam_info_pub_->publish(cam_info_msg);
     // Reset the camera_info for the next request.
     cam_info_msg_.reset();
+    RCLCPP_INFO(get_logger(), "FP: Published camera info");
+  } else {
+    RCLCPP_ERROR(get_logger(), "FP: Camera info is null");
   }
 
   if (depth_msg_ != nullptr) {
@@ -171,9 +232,20 @@ void FoundationPoseServer::Execute(
     depth_pub_->publish(depth_msg);
     // Reset the depth image for the next request.
     depth_msg_.reset();
+    RCLCPP_INFO(get_logger(), "FP: Published depth image");
+  } else {
+    RCLCPP_ERROR(get_logger(), "FP: Depth image is null");
   }
 
-  bbox_pub_->publish(bbox_msg);
+  if (goal->use_segmentation_mask) {
+    segmentation_mask_msg.header.stamp = header.stamp;
+    segmented_mask_pub_->publish(segmentation_mask_msg);
+    RCLCPP_INFO(get_logger(), "Published segmentation mask");
+  } else {
+    bbox_msg.header.stamp = header.stamp;
+    bbox_pub_->publish(bbox_msg);
+    RCLCPP_INFO(get_logger(), "Published bbox");
+  }
 
   RCLCPP_INFO(get_logger(), "All msgs published, waiting for poses.");
 
@@ -222,7 +294,7 @@ void FoundationPoseServer::CallbackPoseEstimate(
   const vision_msgs::msg::Detection3DArray::ConstSharedPtr & msg_ptr)
 {
   pose_estimate_msg_ = msg_ptr;
-  RCLCPP_DEBUG_ONCE(get_logger(), "[CallbackPoseEstimate] Received poses");
+  RCLCPP_DEBUG(get_logger(), "[CallbackPoseEstimate] Received poses");
 }
 
 void FoundationPoseServer::ClearAllMsgs()

@@ -57,7 +57,11 @@ setup(
     maintainer_email='isaac-ros-maintainers@nvidia.com',
     description='Python ROS utilities used across Isaac Manipulator',
     license='Apache-2.0',
-    tests_require=[],
+    extras_require={
+        'test': [
+            'pytest'
+        ]
+    },
     entry_points={},
     cmdclass={
         'build_py': GenerateVersionInfoCommand,

@@ -16,7 +16,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import launch
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, Shutdown
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
@@ -76,7 +76,8 @@ def generate_launch_description():
             'planner_id': planner_id,
             'end_effector_link': end_effector_link,
         }],
-        output='screen'
+        output='screen',
+        on_exit=Shutdown()
     )
 
     return launch.LaunchDescription(launch_args + [pose_to_pose_node])

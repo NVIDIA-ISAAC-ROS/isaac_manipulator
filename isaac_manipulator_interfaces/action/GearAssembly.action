@@ -1,0 +1,11 @@
+# Request
+
+---
+# Result
+
+# Indicates if the gear assembly is successful
+bool success
+
+---
+# Feedback
+int32 progress

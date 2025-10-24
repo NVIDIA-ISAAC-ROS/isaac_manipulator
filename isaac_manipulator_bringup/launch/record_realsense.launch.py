@@ -15,8 +15,8 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-from isaac_ros_launch_utils.all_types import *
 import isaac_ros_launch_utils as lu
+from isaac_ros_launch_utils.all_types import IfCondition, LaunchDescription, Node, TimerAction
 
 
 def get_realsense_topics(camera_id: int):
@@ -58,13 +58,13 @@ def generate_launch_description() -> LaunchDescription:
             condition=IfCondition(args.run_rqt)))
 
     recording_started_msg =\
-        '''\n\n\n
+        """\n\n\n
         -----------------------------------------------------
                     BAG RECORDING IS STARTING NOW
 
                  (make sure the realsense node is up)
         -----------------------------------------------------
-        \n\n\n'''
+        \n\n\n"""
 
     topics_to_record = []
     topics_to_record.extend(get_realsense_topics(1))
@@ -74,7 +74,7 @@ def generate_launch_description() -> LaunchDescription:
         '/joint_states',
     ])
 
-    record_action = lu.record_rosbag(topics=" ".join(topics_to_record), bag_path=args.output)
+    record_action = lu.record_rosbag(topics=' '.join(topics_to_record), bag_path=args.output)
     actions.append(
         TimerAction(period=10.0, actions=[record_action,
                                           lu.log_info(recording_started_msg)]))

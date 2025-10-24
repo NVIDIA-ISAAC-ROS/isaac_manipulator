@@ -78,6 +78,32 @@ set_target_properties(pick_and_place_server PROPERTIES
   BUILD_RPATH_USE_ORIGIN TRUE
   INSTALL_RPATH_USE_LINK_PATH TRUE)
 
+# Object Selection Server
+ament_auto_add_library(
+  object_selection_server SHARED
+  src/object_selection_server.cpp
+)
+
+rclcpp_components_register_nodes(object_selection_server "nvidia::isaac::manipulation::ObjectSelectionServer")
+set(node_plugins "${node_plugins}nvidia::isaac::manipulation::ObjectSelectionServer;$<TARGET_FILE:object_selection_server>\n")
+set_target_properties(object_selection_server PROPERTIES
+  BUILD_WITH_INSTALL_RPATH TRUE
+  BUILD_RPATH_USE_ORIGIN TRUE
+  INSTALL_RPATH_USE_LINK_PATH TRUE)
+
+# Segment Anything Server
+ament_auto_add_library(
+  segment_anything_server SHARED
+  src/segment_anything_server.cpp
+)
+
+rclcpp_components_register_nodes(segment_anything_server "nvidia::isaac::manipulation::SegmentAnythingServer")
+set(node_plugins "${node_plugins}nvidia::isaac::manipulation::SegmentAnythingServer;$<TARGET_FILE:segment_anything_server>\n")
+set_target_properties(segment_anything_server PROPERTIES
+  BUILD_WITH_INSTALL_RPATH TRUE
+  BUILD_RPATH_USE_ORIGIN TRUE
+  INSTALL_RPATH_USE_LINK_PATH TRUE)
+
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   ament_lint_auto_find_test_dependencies()
@@ -88,6 +114,11 @@ if(BUILD_TESTING)
   endif()
 
   find_package(launch_testing_ament_cmake REQUIRED)
+  add_launch_test(test/test_object_selection_server_action.py)
+  add_launch_test(test/foundation_pose_server_action_test.py)
+
+  add_launch_test(test/segment_anything_server_action_call_test.py)
+  add_launch_test(test/get_objects_with_segment_anything_backend_test.py)
 
 endif()
 

@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include <unistd.h>
 
 #include <chrono>
 #include <cmath>
@@ -22,21 +23,34 @@
 
 #include "isaac_manipulator_servers/object_info_server.hpp"
 #include "isaac_manipulator_servers/impl/action_clients.hpp"
+#include "isaac_manipulator_servers/impl/backend_types.hpp"
 
 namespace
 {
 using PoseEstimationBackend = nvidia::isaac::manipulation::PoseEstimationBackend;
 using ObjectDetectionBackend = nvidia::isaac::manipulation::ObjectDetectionBackend;
+using SegmentationBackend = nvidia::isaac::manipulation::SegmentationBackend;
+
 // User string to pose estimation backend mode
 const std::unordered_map<std::string, PoseEstimationBackend> POSE_ESTIMATION_BACKEND({
-    {"FOUNDATION_POSE", PoseEstimationBackend::FOUNDATION_POSE},
-    {"DOPE", PoseEstimationBackend::DOPE}
+    {"DOPE", PoseEstimationBackend::DOPE},
+    {"FOUNDATION_POSE", PoseEstimationBackend::FOUNDATION_POSE}
   });
 
 // User string to object detection backend mode
 const std::unordered_map<std::string, ObjectDetectionBackend> OBJECT_DETECTION_BACKEND({
+    {"DOPE", ObjectDetectionBackend::DOPE},
+    {"GROUNDING_DINO", ObjectDetectionBackend::GROUNDING_DINO},
     {"RT_DETR", ObjectDetectionBackend::RT_DETR},
-    {"DOPE", ObjectDetectionBackend::DOPE}
+    {"SEGMENT_ANYTHING", ObjectDetectionBackend::SEGMENT_ANYTHING},
+    {"SEGMENT_ANYTHING2", ObjectDetectionBackend::SEGMENT_ANYTHING2}
+  });
+
+// User string to segmentation backend mode
+const std::unordered_map<std::string, SegmentationBackend> SEGMENTATION_BACKEND({
+    {"SEGMENT_ANYTHING", SegmentationBackend::SEGMENT_ANYTHING},
+    {"SEGMENT_ANYTHING2", SegmentationBackend::SEGMENT_ANYTHING2},
+    {"NONE", SegmentationBackend::NONE}
   });
 
 template<typename BackendType>
@@ -56,9 +70,11 @@ std::optional<BackendType> ValidateBackend(
   }
 }
 
+using AddSegmentationMaskAction = isaac_manipulator_interfaces::action::AddSegmentationMask;
 using DetectObjectsAction = isaac_manipulator_interfaces::action::DetectObjects;
 using DopeAction = isaac_manipulator_interfaces::action::EstimatePoseDope;
 using FoundationPoseAction = isaac_manipulator_interfaces::action::EstimatePoseFoundationPose;
+using SegmentAnythingAction = isaac_manipulator_interfaces::action::SegmentAnything;
 
 using namespace std::chrono_literals;
 }  // namespace
@@ -126,6 +142,10 @@ template<>
 void ObjectInfoServer::Execute(
   const std::shared_ptr<rclcpp_action::ServerGoalHandle<GetObjectsAction>> goal_handle)
 {
+  // Lock the objects_mutex_ to prevent race condition for multiple action calls
+  // At the same time.
+  std::lock_guard<std::mutex> lock(objects_mutex_);
+
   RCLCPP_INFO(get_logger(), "Executing goal");
   std::vector<isaac_manipulator_interfaces::msg::ObjectInfo> objects;
   auto result = std::make_shared<typename GetObjectsAction::Result>();
@@ -133,7 +153,9 @@ void ObjectInfoServer::Execute(
   if (backend_manager_->ValidateBackendConfig()) {
     auto backend = backend_manager_->GetBackend<ObjectDetectionBackend>();
 
-    if (backend == ObjectDetectionBackend::RT_DETR) {
+    if (backend == ObjectDetectionBackend::GROUNDING_DINO ||
+      backend == ObjectDetectionBackend::RT_DETR)
+    {
       auto registered_client = action_client_manager_->GetRegisteredClient<ObjectDetectionBackend,
           DetectObjectsAction>();
       auto client_goal = registered_client->GetGoal();
@@ -143,11 +165,14 @@ void ObjectInfoServer::Execute(
       if (maybe_trigger_result) {
         auto trigger_result = std::move(*maybe_trigger_result);
         auto detections = trigger_result->detections.detections;
+
         for (uint32_t i = 0; i < detections.size(); i++) {
           objects.push_back(isaac_manipulator_interfaces::msg::ObjectInfo());
           objects.back().object_id = i;
           objects.back().detection_2d = detections[i];
-          // Cache object info
+          objects.back().has_segmentation_mask = false;
+
+          // Cache object info with new ID
           objects_[i] = objects.back();
         }
         result->objects = objects;
@@ -184,8 +209,88 @@ void ObjectInfoServer::Execute(
         goal_handle->abort(result);
         return;
       }
+    } else if (backend == ObjectDetectionBackend::SEGMENT_ANYTHING ||  // NOLINT
+      backend == ObjectDetectionBackend::SEGMENT_ANYTHING2)
+    {
+      // Get the goal parameters
+      const auto goal = goal_handle->get_goal();
+
+      // Check if use_initial_hint is true
+      if (!goal->use_initial_hint) {
+        // If not using initial hint, return existing objects
+        if (objects_.empty()) {
+          RCLCPP_ERROR(
+            get_logger(),
+            "No objects in cache and no initial hint provided");
+          goal_handle->abort(result);
+          return;
+        }
+
+        // Convert cached objects to result
+        for (const auto & [id, obj] : objects_) {
+          objects.push_back(obj);
+        }
+
+        // Now remove segmentation mask from return variable before sending it to the user
+        for (auto & obj : objects) {
+          obj.segmentation_mask.data.clear();  // Clearing just for the result not in main cache
+          obj.has_segmentation_mask = true;
+        }
+
+        result->objects = objects;
+        goal_handle->succeed(result);
+        RCLCPP_INFO(get_logger(), "Returned %zu existing objects", objects.size());
+        return;
+      }
+
+      // Get the initial hint point
+      vision_msgs::msg::Point2D initial_hint;
+      initial_hint.x = goal->initial_hint.x;
+      initial_hint.y = goal->initial_hint.y;
+
+      // Create and send DetectObject goal
+      auto registered_client = action_client_manager_->GetRegisteredClient<ObjectDetectionBackend,
+          SegmentAnythingAction>();
+      auto client_goal = registered_client->GetGoal();
+
+      client_goal.initial_hint_point = initial_hint;
+      client_goal.use_point_hint = true;
+
+      auto maybe_trigger_result =
+        Trigger<SegmentAnythingAction, SegmentationBackend>(client_goal);
+
+      if (maybe_trigger_result) {
+        auto trigger_result = std::move(*maybe_trigger_result);
+
+        // Create object info and cache it
+        objects.push_back(isaac_manipulator_interfaces::msg::ObjectInfo());
+        objects.back().object_id = objects_.size();  // Use size as next ID
+        objects.back().detection_2d = trigger_result->detection;
+        objects.back().segmentation_mask = trigger_result->segmentation_mask;
+        objects.back().has_segmentation_mask = true;
+
+        // Cache the object
+        objects_[objects.back().object_id] = objects.back();
+
+        result->objects = objects;
+
+        // Now remove segmentation mask from return variable before sending it to the user
+        for (auto & obj : result->objects) {
+          obj.segmentation_mask.data.clear();  // Clearing just for the result not in main cache
+          obj.has_segmentation_mask = true;
+        }
+
+        goal_handle->succeed(result);
+        RCLCPP_INFO(get_logger(), "Successfully detected object with initial hint using SAM");
+        return;
+      } else {
+        RCLCPP_ERROR(get_logger(), "Failed to detect object with initial hint using SAM");
+        goal_handle->abort(result);
+        return;
+      }
     }
   } else {
+    RCLCPP_ERROR(this->get_logger(), "Invalid backend configuration. Rejecting goal.");
     goal_handle->abort(result);
     return;
   }
@@ -195,6 +300,7 @@ template<>
 void ObjectInfoServer::Execute<GetObjectPoseAction>(
   const std::shared_ptr<rclcpp_action::ServerGoalHandle<GetObjectPoseAction>> goal_handle)
 {
+  std::lock_guard<std::mutex> lock(objects_mutex_);
   RCLCPP_INFO(get_logger(), "Executing goal");
   auto result = std::make_shared<typename GetObjectPoseAction::Result>();
   if (backend_manager_->ValidateBackendConfig()) {
@@ -221,11 +327,36 @@ void ObjectInfoServer::Execute<GetObjectPoseAction>(
         " Calling pose estimation action.", object_id);
       // Trigger pose estimation action
       auto backend = backend_manager_->GetBackend<PoseEstimationBackend>();
+      auto segmentation_backend = backend_manager_->GetBackend<SegmentationBackend>();
       if (backend == PoseEstimationBackend::FOUNDATION_POSE) {
         auto registered_client = action_client_manager_->GetRegisteredClient<PoseEstimationBackend,
             FoundationPoseAction>();
         auto client_goal = registered_client->GetGoal();
-        client_goal.roi = object_info.detection_2d;
+
+        if (segmentation_backend != SegmentationBackend::NONE) {
+          client_goal.use_segmentation_mask = true;
+          client_goal.segmentation_mask = object_info.segmentation_mask;
+
+          if (object_info.segmentation_mask.data.empty()) {
+            RCLCPP_ERROR(
+              get_logger(), "Segmentation mask is empty for object_id [%d]", object_id);
+            goal_handle->abort(result);
+            return;
+          }
+        } else {
+          client_goal.roi = object_info.detection_2d;
+        }
+
+        // Set mesh resource before triggering the pose estimation action
+        if (!object_info.mesh_file_path.empty()) {
+          client_goal.mesh_file_path = object_info.mesh_file_path;
+        }
+
+        // Set name of the object before triggering the pose estimation action
+        if (!object_info.name.empty()) {
+          client_goal.object_frame_name = object_info.name;
+        }
+
         auto maybe_trigger_result =
           Trigger<FoundationPoseAction, PoseEstimationBackend>(client_goal);
 
@@ -241,8 +372,11 @@ void ObjectInfoServer::Execute<GetObjectPoseAction>(
           goal_handle->abort(result);
           return;
         }
+      } else {
+        RCLCPP_ERROR(
+          get_logger(), "Invalid pose estimation backend [%s]", pose_estimation_backend_.c_str());
+        throw std::invalid_argument("Invalid pose estimation backend.");
       }
-      return;
     } else {
       RCLCPP_INFO(
         get_logger(), "Found detections_3d for object_id [%d], Skipping pose estimation action.",
@@ -254,8 +388,106 @@ void ObjectInfoServer::Execute<GetObjectPoseAction>(
     }
 
   } else {
+    RCLCPP_ERROR(this->get_logger(), "Invalid backend configuration. Rejecting goal.");
     goal_handle->abort(result);
     return;
+  }
+}
+
+template<>
+void ObjectInfoServer::Execute<AddSegmentationMaskAction>(
+  const std::shared_ptr<rclcpp_action::ServerGoalHandle<AddSegmentationMaskAction>> goal_handle)
+{
+  // Add this line to prevent race conditions
+  std::lock_guard<std::mutex> lock(objects_mutex_);
+
+  RCLCPP_INFO(get_logger(), "Executing goal for AddSegmentationMask");
+  auto result = std::make_shared<typename AddSegmentationMaskAction::Result>();
+
+  // Validate backend configuration
+  if (!backend_manager_->ValidateBackendConfig()) {
+    RCLCPP_ERROR(get_logger(), "Backend not configured correctly");
+    goal_handle->abort(result);
+    return;
+  }
+
+  // Check if object exists in cache
+  auto object_id = goal_handle->get_goal()->object_id;
+  RCLCPP_INFO(get_logger(), "Object id for AddSegmentationMask: %d", object_id);
+  const auto object_it = objects_.find(object_id);
+  if (object_it == std::end(objects_)) {
+    RCLCPP_ERROR(
+      get_logger(), "Object id (%d) not found. Make sure to call GetObjects action first",
+      object_id);
+    goal_handle->abort(result);
+    return;
+  }
+
+  // Get the object info
+  auto object_info = object_it->second;
+
+  // If segmentation mask already exists, return it
+  if (!object_info.segmentation_mask.data.empty()) {
+    // Need to perform a copy here, not a move.
+    // Potentially expensive CPU to CPU copy over here so just send the flag
+    result->has_segmentation_mask = object_info.has_segmentation_mask;
+    goal_handle->succeed(result);
+    return;
+  }
+
+  // Check if we have detection_2d to use as initial hint
+  vision_msgs::msg::BoundingBox2D initial_hint = object_info.detection_2d.bbox;
+  if (initial_hint.size_x == 0 || initial_hint.size_y == 0 ||
+    (initial_hint.center.position.x == 0 && initial_hint.center.position.y == 0))
+  {
+    RCLCPP_ERROR(
+      get_logger(), "Invalid detection_2d found for object id (%d).",
+      object_id);
+    goal_handle->abort(result);
+    return;
+  }
+
+  auto segmentation_backend = backend_manager_->GetBackend<SegmentationBackend>();
+  if (segmentation_backend == SegmentationBackend::SEGMENT_ANYTHING ||
+    segmentation_backend == SegmentationBackend::SEGMENT_ANYTHING2)
+  {
+    // Create and send SegmentAnything goal
+    auto registered_client = action_client_manager_->GetRegisteredClient<SegmentationBackend,
+        SegmentAnythingAction>();
+    auto client_goal = registered_client->GetGoal();
+    client_goal.initial_hint_bbox = initial_hint;
+    client_goal.use_point_hint = false;
+
+    RCLCPP_INFO(
+      get_logger(), "Calling SegmentAnything with initial hint (x: %f, y: %f, w: %f, h: %f)",
+      initial_hint.center.position.x, initial_hint.center.position.y,
+      initial_hint.size_x, initial_hint.size_y);
+
+    auto maybe_trigger_result = Trigger<SegmentAnythingAction, SegmentationBackend>(client_goal);
+
+    if (maybe_trigger_result) {
+      auto trigger_result = std::move(*maybe_trigger_result);
+
+      // Then move into cache
+      objects_[object_id].segmentation_mask = std::move(trigger_result->segmentation_mask);
+      objects_[object_id].has_segmentation_mask = true;
+      // Now copy over this big image to send the result to the user,
+      // This is a very expensive operation so we don't do it, instead just send the flag
+      result->has_segmentation_mask = true;
+
+      goal_handle->succeed(result);
+      RCLCPP_INFO(
+        get_logger(), "Successfully generated segmentation mask for object id (%d)", object_id);
+    } else {
+      RCLCPP_ERROR(
+        get_logger(), "Failed to generate segmentation mask for object id (%d)", object_id);
+      goal_handle->abort(result);
+    }
+
+  } else {
+    RCLCPP_ERROR(
+      get_logger(), "Invalid segmentation backend [%s]", segmentation_backend_.c_str());
+    throw std::invalid_argument("Invalid segmentation backend.");
   }
 }
 
@@ -293,6 +525,23 @@ rclcpp_action::GoalResponse ObjectInfoServer::HandleGoal<GetObjectPoseAction::Go
 }
 
 template<>
+rclcpp_action::GoalResponse ObjectInfoServer::HandleGoal<AddSegmentationMaskAction::Goal>(
+  const rclcpp_action::GoalUUID & uuid, std::shared_ptr<const AddSegmentationMaskAction::Goal> goal)
+{
+  RCLCPP_INFO(
+    get_logger(), "Received goal request for AddSegmentationMask with object_id %d",
+    goal->object_id);
+  RCLCPP_INFO(get_logger(), "UUID: %s", rclcpp_action::to_string(uuid).c_str());
+
+  if (backend_manager_->ValidateBackendConfig()) {
+    return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+  } else {
+    RCLCPP_ERROR(this->get_logger(), "Invalid backend configuration. Rejecting goal.");
+    return rclcpp_action::GoalResponse::REJECT;
+  }
+}
+
+template<>
 rclcpp_action::CancelResponse ObjectInfoServer::HandleCancel<GetObjectsAction>(
   const std::shared_ptr<rclcpp_action::ServerGoalHandle<GetObjectsAction>> goal_handle)
 {
@@ -300,7 +549,9 @@ rclcpp_action::CancelResponse ObjectInfoServer::HandleCancel<GetObjectsAction>(
   (void)goal_handle;
   // Cancel internal goal
   auto backend = backend_manager_->GetBackend<ObjectDetectionBackend>();
-  if (backend == ObjectDetectionBackend::RT_DETR) {
+  if (backend == ObjectDetectionBackend::GROUNDING_DINO ||
+    backend == ObjectDetectionBackend::RT_DETR)
+  {
     auto client = action_client_manager_->GetRegisteredClient<ObjectDetectionBackend,
         DetectObjectsAction>()->GetClient();
     client->async_cancel_all_goals();
@@ -309,6 +560,18 @@ rclcpp_action::CancelResponse ObjectInfoServer::HandleCancel<GetObjectsAction>(
   if (backend == ObjectDetectionBackend::DOPE) {
     auto client = action_client_manager_->GetRegisteredClient<ObjectDetectionBackend,
         DopeAction>()->GetClient();
+    client->async_cancel_all_goals();
+  }
+
+  if (backend == ObjectDetectionBackend::SEGMENT_ANYTHING) {
+    auto client = action_client_manager_->GetRegisteredClient<ObjectDetectionBackend,
+        SegmentAnythingAction>()->GetClient();
+    client->async_cancel_all_goals();
+  }
+
+  if (backend == ObjectDetectionBackend::SEGMENT_ANYTHING2) {
+    auto client = action_client_manager_->GetRegisteredClient<ObjectDetectionBackend,
+        SegmentAnythingAction>()->GetClient();
     client->async_cancel_all_goals();
   }
 
@@ -342,6 +605,29 @@ rclcpp_action::CancelResponse ObjectInfoServer::HandleCancel<GetObjectPoseAction
   return rclcpp_action::CancelResponse::ACCEPT;
 }
 
+template<>
+rclcpp_action::CancelResponse ObjectInfoServer::HandleCancel<AddSegmentationMaskAction>(
+  const std::shared_ptr<rclcpp_action::ServerGoalHandle<AddSegmentationMaskAction>> goal_handle)
+{
+  RCLCPP_INFO(
+    get_logger(),
+    "Received request to cancel goal for AddSegmentationMask with object_id %d",
+    goal_handle->get_goal()->object_id);
+  (void)goal_handle;
+
+  // Cancel internal goal
+  auto backend = backend_manager_->GetBackend<SegmentationBackend>();
+  if (backend == SegmentationBackend::SEGMENT_ANYTHING ||
+    backend == SegmentationBackend::SEGMENT_ANYTHING2)
+  {
+    auto client = action_client_manager_->GetRegisteredClient<SegmentationBackend,
+        SegmentAnythingAction>()->GetClient();
+    client->async_cancel_all_goals();
+  }
+
+  return rclcpp_action::CancelResponse::ACCEPT;
+}
+
 template<typename ActionType>
 void ObjectInfoServer::HandleAccepted(
   const std::shared_ptr<rclcpp_action::ServerGoalHandle<ActionType>> goal_handle)
@@ -353,9 +639,10 @@ void ObjectInfoServer::HandleAccepted(
 }
 
 void ObjectInfoServer::ClearObjects(
-  const std::shared_ptr<isaac_manipulator_interfaces::srv::ClearObjects::Request> request,
-  std::shared_ptr<isaac_manipulator_interfaces::srv::ClearObjects::Response> response)
+  const std::shared_ptr<ClearObjectsSrv::Request> request,
+  std::shared_ptr<ClearObjectsSrv::Response> response)
 {
+  std::lock_guard<std::mutex> lock(objects_mutex_);
   if (request->object_ids.empty()) {
     RCLCPP_INFO(get_logger(), "Clearing all objects in the cache.");
     response->count = objects_.size();
@@ -377,6 +664,82 @@ void ObjectInfoServer::ClearObjects(
   response->count = count;
 }
 
+void ObjectInfoServer::AddMeshToObject(
+  const std::shared_ptr<AddMeshToObjectSrv::Request> request,
+  std::shared_ptr<AddMeshToObjectSrv::Response> response)
+{
+  std::lock_guard<std::mutex> lock(objects_mutex_);
+  response->success = true;
+  response->failed_ids.clear();
+
+  // Check if input arrays have same size
+  if (request->object_ids.size() != request->mesh_file_paths.size()) {
+    response->success = false;
+    response->message = "Mismatched array sizes between object_ids and mesh_file_paths";
+    return;
+  }
+
+  // Process each object ID and mesh file path pair
+  for (size_t i = 0; i < request->object_ids.size(); ++i) {
+    const auto object_id = request->object_ids[i];
+    const auto & mesh_file_path = request->mesh_file_paths[i];
+
+    // Check if object exists in cache
+    auto object_it = objects_.find(object_id);
+    if (object_it == std::end(objects_)) {
+      RCLCPP_WARN(
+        get_logger(), "Object with id [%d] not found in the cache.", object_id);
+      response->failed_ids.push_back(object_id);
+      response->success = false;
+      continue;
+    }
+
+    // Check if mesh file exists
+    if (access(mesh_file_path.c_str(), F_OK | R_OK) == -1) {
+      RCLCPP_WARN(
+        get_logger(), "Mesh file [%s] does not exist for object id [%d]",
+        mesh_file_path.c_str(), object_id);
+      response->failed_ids.push_back(object_id);
+      response->success = false;
+      continue;
+    }
+
+    // Update mesh file path
+    object_it->second.mesh_file_path = mesh_file_path;
+    RCLCPP_INFO(
+      get_logger(), "Successfully added mesh file [%s] to object id [%d]",
+      mesh_file_path.c_str(), object_id);
+  }
+
+  // Set appropriate message based on results
+  if (response->failed_ids.empty()) {
+    response->message = "Successfully added all mesh files";
+  } else {
+    response->message = "Failed to add mesh files for some objects. Check failed_ids";
+  }
+}
+
+void ObjectInfoServer::AssignNameToObject(
+  const std::shared_ptr<AssignNameToObjectSrv::Request> request,
+  std::shared_ptr<AssignNameToObjectSrv::Response> response)
+{
+  std::lock_guard<std::mutex> lock(objects_mutex_);
+  const auto object_id = request->object_id;
+  const auto & name = request->name;
+
+  // Check if object exists in cache
+  auto object_it = objects_.find(object_id);
+  if (object_it == std::end(objects_)) {
+    RCLCPP_WARN(get_logger(), "Object with id [%d] not found in the cache.", object_id);
+    response->result = false;
+    return;
+  }
+
+  // Update object name
+  object_it->second.name = name;
+  response->result = true;
+}
+
 ObjectInfoServer::ObjectInfoServer(const rclcpp::NodeOptions & options)
 : Node("object_info_server", options),
   action_client_manager_(std::make_shared<ActionClientManager>()),
@@ -384,6 +747,8 @@ ObjectInfoServer::ObjectInfoServer(const rclcpp::NodeOptions & options)
       "pose_estimation_backend", "FOUNDATION_POSE")),
   object_detection_backend_(declare_parameter<std::string>(
       "object_detection_backend", "RT_DETR")),
+  segmentation_backend_(declare_parameter<std::string>(
+      "segmentation_backend", "SEGMENT_ANYTHING")),
   param_event_handler_(std::make_shared<rclcpp::ParameterEventHandler>(this)),
   get_objects_cb_group_(create_callback_group(
       rclcpp::CallbackGroupType::MutuallyExclusive)),
@@ -395,14 +760,20 @@ ObjectInfoServer::ObjectInfoServer(const rclcpp::NodeOptions & options)
       rclcpp::CallbackGroupType::MutuallyExclusive)),
   detect_objects_cb_group_(create_callback_group(
       rclcpp::CallbackGroupType::MutuallyExclusive)),
+  segmentation_cb_group_(create_callback_group(
+      rclcpp::CallbackGroupType::MutuallyExclusive)),
   clear_objects_cb_group_(create_callback_group(
+      rclcpp::CallbackGroupType::MutuallyExclusive)),
+  add_mesh_objects_cb_group_(create_callback_group(
+      rclcpp::CallbackGroupType::MutuallyExclusive)),
+  assign_name_to_object_cb_group_(create_callback_group(
       rclcpp::CallbackGroupType::MutuallyExclusive))
 {
-  clear_objects_ = create_service<isaac_manipulator_interfaces::srv::ClearObjects>(
-    "/clear_objects",
+  clear_objects_ = create_service<ClearObjectsSrv>(
+    "clear_objects",
     std::bind(
       &ObjectInfoServer::ClearObjects, this, std::placeholders::_1, std::placeholders::_2),
-    rmw_qos_profile_services_default,
+    rclcpp::ServicesQoS(),
     clear_objects_cb_group_);
 
   backend_manager_ = std::make_shared<BackendManager>();
@@ -426,8 +797,20 @@ ObjectInfoServer::ObjectInfoServer(const rclcpp::NodeOptions & options)
   } else {
     RCLCPP_ERROR(
       this->get_logger(), "Invalid object detection backend [%s]",
-      pose_estimation_backend_.c_str());
+      object_detection_backend_.c_str());
     throw std::invalid_argument("Invalid object detection backend.");
+  }
+
+  auto segmentation_backend = ValidateBackend(
+    segmentation_backend_, SEGMENTATION_BACKEND);
+  if (segmentation_backend) {
+    backend_manager_->AddBackend(*segmentation_backend);
+    RegisterActionClients(*segmentation_backend);
+  } else {
+    RCLCPP_ERROR(
+      this->get_logger(), "Invalid segmentation backend [%s]",
+      segmentation_backend_.c_str());
+    throw std::invalid_argument("Invalid segmentation backend.");
   }
 
   param_event_cb_ = param_event_handler_->add_parameter_event_callback(
@@ -435,18 +818,29 @@ ObjectInfoServer::ObjectInfoServer(const rclcpp::NodeOptions & options)
 
   get_objects_server_ = rclcpp_action::create_server<GetObjectsAction>(
     this,
-    "/get_objects",
+    "get_objects",
     std::bind(
       &ObjectInfoServer::HandleGoal<GetObjectsAction::Goal>, this,
       std::placeholders::_1, std::placeholders::_2),
     std::bind(&ObjectInfoServer::HandleCancel<GetObjectsAction>, this, std::placeholders::_1),
     std::bind(&ObjectInfoServer::HandleAccepted<GetObjectsAction>, this, std::placeholders::_1),
-    rcl_action_server_get_default_options(),
-    get_objects_cb_group_);
+    rcl_action_server_get_default_options(), get_objects_cb_group_);
+
+  segmentation_server_ = rclcpp_action::create_server<AddSegmentationMaskAction>(
+    this,
+    "add_segmentation_mask",
+    std::bind(
+      &ObjectInfoServer::HandleGoal<AddSegmentationMaskAction::Goal>, this,
+      std::placeholders::_1, std::placeholders::_2),
+    std::bind(
+      &ObjectInfoServer::HandleCancel<AddSegmentationMaskAction>, this, std::placeholders::_1),
+    std::bind(
+      &ObjectInfoServer::HandleAccepted<AddSegmentationMaskAction>, this, std::placeholders::_1),
+    rcl_action_server_get_default_options(), segmentation_cb_group_);
 
   object_info_server_ = rclcpp_action::create_server<GetObjectPoseAction>(
     this,
-    "/get_object_pose",
+    "get_object_pose",
     std::bind(
       &ObjectInfoServer::HandleGoal<GetObjectPoseAction::Goal>, this,
       std::placeholders::_1, std::placeholders::_2),
@@ -456,8 +850,19 @@ ObjectInfoServer::ObjectInfoServer(const rclcpp::NodeOptions & options)
     std::bind(
       &ObjectInfoServer::HandleAccepted<GetObjectPoseAction>, this,
       std::placeholders::_1),
-    rcl_action_server_get_default_options(),
-    get_objects_pose_cb_group_);
+    rcl_action_server_get_default_options(), get_objects_pose_cb_group_);
+
+  add_mesh_objects_ = create_service<AddMeshToObjectSrv>(
+    "add_mesh_to_object",
+    std::bind(
+      &ObjectInfoServer::AddMeshToObject, this, std::placeholders::_1, std::placeholders::_2),
+    rclcpp::ServicesQoS(), add_mesh_objects_cb_group_);
+
+  assign_name_to_object_ = create_service<AssignNameToObjectSrv>(
+    "assign_name_to_object",
+    std::bind(
+      &ObjectInfoServer::AssignNameToObject, this, std::placeholders::_1, std::placeholders::_2),
+    rclcpp::ServicesQoS(), assign_name_to_object_cb_group_);
 }
 
 void ObjectInfoServer::ParameterCallback(const rcl_interfaces::msg::ParameterEvent & event)
@@ -502,12 +907,28 @@ void ObjectInfoServer::ParameterCallback(const rcl_interfaces::msg::ParameterEve
           param_value.c_str(), changed_param.name.c_str(),
           object_detection_backend_.c_str());
       }
+    } else if (changed_param.name == "segmentation_backend") {
+      auto backend = ValidateBackend(param_value, SEGMENTATION_BACKEND);
+      if (backend) {
+        segmentation_backend_ = param_value;
+        backend_manager_->AddBackend(*backend);
+        RegisterActionClients(*backend);
+        RCLCPP_INFO(
+          get_logger(), "Changed segmentation backend to [%s]",
+          segmentation_backend_.c_str());
+      } else {
+        set_parameter(rclcpp::Parameter(changed_param.name, segmentation_backend_));
+        RCLCPP_WARN(
+          get_logger(), "Invalid backend [%s] for parameter [%s]. Reverted to prev[%s]",
+          param_value.c_str(), changed_param.name.c_str(),
+          segmentation_backend_.c_str());
+      }
     }
 
     if (backend_manager_->ValidateBackendConfig()) {
       RCLCPP_INFO(get_logger(), "Valid backend configuration");
     } else {
-      RCLCPP_WARN(get_logger(), "Invalid backend configuration");
+      RCLCPP_ERROR(get_logger(), "Invalid backend configuration");
     }
   }
 }
@@ -517,24 +938,43 @@ void ObjectInfoServer::RegisterActionClients(PoseEstimationBackend backend)
   if (backend == PoseEstimationBackend::FOUNDATION_POSE) {
     action_client_manager_->RegisterActionClient<PoseEstimationBackend>(
       std::make_shared<ActionClient<FoundationPoseAction>>(
-        *this, "/estimate_pose_foundation_pose", estimate_pose_fp_cb_group_));
+        *this, "estimate_pose_foundation_pose", estimate_pose_fp_cb_group_));
   } else if (backend == PoseEstimationBackend::DOPE) {
     action_client_manager_->RegisterActionClient<PoseEstimationBackend>(
       std::make_shared<ActionClient<DopeAction>>(
-        *this, "/estimate_pose_dope", estimate_pose_dope_cb_group_));
+        *this, "estimate_pose_dope", estimate_pose_dope_cb_group_));
   }
 }
 
 void ObjectInfoServer::RegisterActionClients(ObjectDetectionBackend backend)
 {
-  if (backend == ObjectDetectionBackend::RT_DETR) {
+  if (backend == ObjectDetectionBackend::GROUNDING_DINO ||
+    backend == ObjectDetectionBackend::RT_DETR)
+  {
     action_client_manager_->RegisterActionClient<ObjectDetectionBackend>(
       std::make_shared<ActionClient<DetectObjectsAction>>(
-        *this, "/detect_objects", detect_objects_cb_group_));
+        *this, "detect_objects", detect_objects_cb_group_));
   } else if (backend == ObjectDetectionBackend::DOPE) {
     action_client_manager_->RegisterActionClient<ObjectDetectionBackend>(
       std::make_shared<ActionClient<DopeAction>>(
-        *this, "/estimate_pose_dope", estimate_pose_dope_cb_group_));
+        *this, "estimate_pose_dope", estimate_pose_dope_cb_group_));
+  } else if (backend == ObjectDetectionBackend::SEGMENT_ANYTHING ||  // NOLINT
+    backend == ObjectDetectionBackend::SEGMENT_ANYTHING2)
+  {
+    action_client_manager_->RegisterActionClient<ObjectDetectionBackend>(
+      std::make_shared<ActionClient<SegmentAnythingAction>>(
+        *this, "segment_anything", segmentation_cb_group_));
+  }
+}
+
+void ObjectInfoServer::RegisterActionClients(SegmentationBackend backend)
+{
+  if (backend == SegmentationBackend::SEGMENT_ANYTHING ||
+    backend == SegmentationBackend::SEGMENT_ANYTHING2)
+  {
+    action_client_manager_->RegisterActionClient<SegmentationBackend>(
+      std::make_shared<ActionClient<SegmentAnythingAction>>(
+        *this, "segment_anything", segmentation_cb_group_));
   }
 }
 

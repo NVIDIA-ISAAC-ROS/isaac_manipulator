@@ -1,4 +1,5 @@
 # File for realsense specific nvblox parameters.
 /**:
   ros__parameters:
+    # Max camera hz supported is 40, throw away frames if higher.
     integrate_depth_rate_hz: 40.0

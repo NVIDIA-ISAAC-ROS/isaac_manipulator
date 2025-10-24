@@ -24,14 +24,70 @@ ament_auto_find_build_dependencies()
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   ament_lint_auto_find_test_dependencies()
-
+  # The FindPythonInterp and FindPythonLibs modules are removed
+  if(POLICY CMP0148)
+    cmake_policy(SET CMP0148 OLD)
+  endif()
   add_subdirectory(test)
-endif()
 
+  find_package(launch_testing_ament_cmake REQUIRED)
+  # These test QOS setting for the foundation pose workflow in manipulator for object following
+  add_launch_test(test/foundationpose_qos_object_following_sim_test.py)
+  add_launch_test(test/foundationpose_qos_object_following_realsense_test.py)
+
+  # These test QOS setting for the foundation pose workflow in manipulator for foundation servers
+  # These are used for the pick and place workflow
+  add_launch_test(test/foundationpose_qos_servers_pick_and_place_sim_test.py)
+  add_launch_test(test/foundationpose_qos_servers_pick_and_place_realsense_test.py)
+
+  # These tests test for topic connection correctness, these are heavy tests they run ros2
+  # cmd line tools for each node and topic and verify the graph structure
+  add_launch_test(test/foundationpose_topic_connections_object_following_test.py TIMEOUT 100)
+  add_launch_test(test/foundationpose_topic_connections_pick_and_place_test.py TIMEOUT 100)
+
+  # These test QOS setting for the core nodes in manipulator
+  add_launch_test(test/core_nodes_qos_sim_test.py)
+  add_launch_test(test/core_nodes_qos_realsense_test.py)
+
+  # These test the graph structure of core nodes in manipulator
+  add_launch_test(test/core_nodes_topic_connections_test.py TIMEOUT 300)
+
+  # Add test to check object following with pose estimation POL
+  add_launch_test(test/pose_estimation_pol_sim_test.py)
+  add_launch_test(test/object_detection_pol_sim_test.py)
+  add_launch_test(test/pose_estimation_pol_realsense_test.py)
+  add_launch_test(test/object_detection_pol_realsense_test.py)
+  add_launch_test(test/pick_and_place_servers_realsense_pol_test.py)
+  add_launch_test(test/pick_and_place_servers_sim_test.py)
+
+  # Add test to check manipulator cumotion and perception
+  add_launch_test(test/manipulator_cumotion_and_perception_load_test_sim_test.py TIMEOUT 300)
+  add_launch_test(test/manipulator_cumotion_and_perception_load_test_realsense_test.py TIMEOUT 300)
+
+  # Add test to check robot segmentor correctness
+  add_launch_test(test/robot_segmentor_correctness_check_sim_test.py)
+  add_launch_test(test/robot_segmentor_correctness_check_realsense_test.py)
+  add_launch_test(test/robot_segmentor_pol_realsense_test.py TIMEOUT 100)
+  add_launch_test(test/robot_segmentor_pol_realsense_2_test.py TIMEOUT 100)
+
+  # Grounding DINO test
+  add_launch_test(test/grounding_dino_detection_pol_realsense_test.py TIMEOUT 100)
+  add_launch_test(test/grounding_dino_detector_servers_realsense_test.py TIMEOUT 100)
+
+  # Segment Anything test
+  add_launch_test(test/rtdetr_foundation_pose_servers_sim_test.py TIMEOUT 100)
+  add_launch_test(test/segment_anything_foundation_pose_object_following_pol_test_sim.py TIMEOUT 100)
+  add_launch_test(test/segment_anything_foundation_pose_servers_pol_sim_test.py TIMEOUT 100)
+  add_launch_test(test/segment_anything_rtdetr_detector_servers_realsense_test.py TIMEOUT 100)
+  add_launch_test(test/segment_anything_rtdetr_detector_servers_sim_test.py TIMEOUT 100)
+
+  # Segment Anything 2 test
+  add_launch_test(test/segment_anything2_rtdetr_detector_servers_realsense_test.py TIMEOUT 100)
+endif()
 
 # Embed versioning information into installed files
 ament_index_get_resource(ISAAC_ROS_COMMON_CMAKE_PATH isaac_ros_common_cmake_path isaac_ros_common)
 include("${ISAAC_ROS_COMMON_CMAKE_PATH}/isaac_ros_common-version-info.cmake")
 generate_version_info(${PROJECT_NAME})
 
-ament_auto_package(INSTALL_TO_SHARE launch config)
+ament_auto_package(INSTALL_TO_SHARE launch config params test)

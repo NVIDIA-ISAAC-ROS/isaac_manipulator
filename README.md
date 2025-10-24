@@ -1,7 +1,7 @@
 # Isaac Manipulator
 
-This repository contains the integrated Isaac Manipulator launch files.
+This repository contains the integrated Isaac for Manipulation launch files.
 
 ## Setup and Documentation
 
-Visit [Isaac Manipulator](https://nvidia-isaac-ros.github.io/reference_workflows/isaac_manipulator/index.html) to learn how to use this repository.
+Visit [Isaac for Manipulation](https://nvidia-isaac-ros.github.io/reference_workflows/isaac_for_manipulation/index.html) to learn how to use this repository.

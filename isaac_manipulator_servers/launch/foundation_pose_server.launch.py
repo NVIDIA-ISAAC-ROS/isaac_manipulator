@@ -74,9 +74,24 @@ def generate_launch_description():
             description='Input pose estimate topic name',
         ),
         DeclareLaunchArgument(
+            'fp_out_segmented_mask_topic_name',
+            default_value='foundation_pose_server/segmented_mask',
+            description='Output segmented mask topic name',
+        ),
+        DeclareLaunchArgument(
             'fp_out_pose_estimate_topic_name',
             default_value='foundation_pose_server/pose_estimation/output',
             description='Output pose estimate topic name',
+        ),
+        DeclareLaunchArgument(
+            'fp_input_qos',
+            default_value='SENSOR_DATA',
+            description='Subscription QoS profile for the Foundation Pose Server',
+        ),
+        DeclareLaunchArgument(
+            'fp_result_and_output_qos',
+            default_value='DEFAULT',
+            description='Publication QoS profile for the Foundation Pose Server',
         ),
     ]
 
@@ -93,10 +108,14 @@ def generate_launch_description():
                 'in_depth_topic_name': LaunchConfiguration('fp_in_depth_topic_name'),
                 'out_depth_topic_name': LaunchConfiguration('fp_out_depth_topic_name'),
                 'out_bbox_topic_name': LaunchConfiguration('fp_out_bbox_topic_name'),
+                'out_segmented_mask_topic_name':
+                    LaunchConfiguration('fp_out_segmented_mask_topic_name'),
                 'in_pose_estimate_topic_name':
                     LaunchConfiguration('fp_in_pose_estimate_topic_name'),
                 'out_pose_estimate_topic_name':
-                    LaunchConfiguration('fp_out_pose_estimate_topic_name')
+                    LaunchConfiguration('fp_out_pose_estimate_topic_name'),
+                'input_qos': LaunchConfiguration('fp_input_qos'),
+                'result_and_output_qos': LaunchConfiguration('fp_result_and_output_qos')
         }]
     )
 

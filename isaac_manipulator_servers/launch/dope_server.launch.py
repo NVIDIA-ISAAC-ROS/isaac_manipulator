@@ -15,36 +15,95 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+import isaac_manipulator_ros_python_utils.constants as constants
+from isaac_ros_launch_utils.all_types import (
+    GroupAction, LoadComposableNodes
+)
+
 import launch
-from launch_ros.actions import ComposableNodeContainer
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
 from launch_ros.descriptions import ComposableNode
 
 
 def generate_launch_description():
     """Launch file to bring up isaac manipulator pick and place server."""
+    launch_args = [
+        DeclareLaunchArgument(
+            'dope_action_name',
+            default_value='dope',
+            description='Action name for the DOPE server',
+        ),
+        DeclareLaunchArgument(
+            'dope_in_img_topic_name',
+            default_value='image_rect',
+            description='Input image topic name',
+        ),
+        DeclareLaunchArgument(
+            'dope_out_img_topic_name',
+            default_value='dope_server/image_rect',
+            description='Output image topic name',
+        ),
+        DeclareLaunchArgument(
+            'dope_in_camera_info_topic_name',
+            default_value='camera_info_rect',
+            description='Input camera info topic name',
+        ),
+        DeclareLaunchArgument(
+            'dope_out_camera_info_topic_name',
+            default_value='dope_server/camera_info',
+            description='Output camera info topic name',
+        ),
+        DeclareLaunchArgument(
+            'dope_in_pose_estimate_topic_name',
+            default_value='detections',
+            description='Input pose estimate topic name',
+        ),
+        DeclareLaunchArgument(
+            'dope_out_pose_estimate_topic_name',
+            default_value='dope_server/poses',
+            description='Output pose estimate topic name',
+        ),
+        DeclareLaunchArgument(
+            'dope_sub_qos',
+            default_value='SENSOR_DATA',
+            description='Subscription QoS profile for the DOPE server',
+        ),
+        DeclareLaunchArgument(
+            'dope_pub_qos',
+            default_value='DEFAULT',
+            description='Publication QoS profile for the DOPE server',
+        ),
+    ]
+
     dope_node = ComposableNode(
         name='dope_server',
         package='isaac_manipulator_servers',
         plugin='nvidia::isaac::manipulation::DopeServer',
         parameters=[{
-                'action_name': 'dope',
-                'in_img_topic_name': 'image_rect',
-                'out_img_topic_name': 'dope_server/image_rect',
-                'in_camera_info_topic_name': 'camera_info_rect',
-                'out_camera_info_topic_name': 'dope_server/camera_info',
-                'in_pose_estimate_topic_name': 'detections',
-                'out_pose_estimate_topic_name': 'dope_server/poses',
+                'action_name':  LaunchConfiguration('dope_action_name'),
+                'in_img_topic_name': LaunchConfiguration('dope_in_img_topic_name'),
+                'out_img_topic_name': LaunchConfiguration('dope_out_img_topic_name'),
+                'in_camera_info_topic_name': LaunchConfiguration('dope_in_camera_info_topic_name'),
+                'out_camera_info_topic_name': LaunchConfiguration(
+                    'dope_out_camera_info_topic_name'),
+                'in_pose_estimate_topic_name': LaunchConfiguration(
+                    'dope_in_pose_estimate_topic_name'),
+                'out_pose_estimate_topic_name': LaunchConfiguration(
+                    'dope_out_pose_estimate_topic_name'),
+                'sub_qos': LaunchConfiguration('dope_sub_qos'),
+                'pub_qos': LaunchConfiguration('dope_pub_qos')
             }]
     )
 
-    dope_launch_container = ComposableNodeContainer(
-        name='dope_launch_container',
-        namespace='',
-        package='rclcpp_components',
-        executable='component_container',
+    load_composable_nodes = LoadComposableNodes(
+        target_container=constants.MANIPULATOR_CONTAINER_NAME,
         composable_node_descriptions=[dope_node],
-        output='screen',
-        arguments=['--ros-args', '--log-level', 'dope_server:=info']
+    )
+    final_launch = GroupAction(
+        actions=[
+            load_composable_nodes
+        ],
     )
 
-    return launch.LaunchDescription([dope_launch_container])
+    return launch.LaunchDescription(launch_args + [final_launch])

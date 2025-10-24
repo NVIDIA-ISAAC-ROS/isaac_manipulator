@@ -20,29 +20,34 @@ from typing import List, Tuple
 
 from ament_index_python.packages import get_package_share_directory
 
-from isaac_manipulator_ros_python_utils.types import CameraType
+from isaac_manipulator_ros_python_utils.manipulator_types import CameraType
 import isaac_ros_launch_utils as lu
-from isaac_ros_launch_utils.all_types import Action, Node, LaunchDescription
+from isaac_ros_launch_utils.all_types import Action, LaunchDescription, Node
 
 
-def get_hawk_depth_topics() -> Tuple[str, str]:
-    depth_image_topics = '["/depth_image"]'
-    depth_camera_infos = '["/rgb/camera_info"]'
-    return depth_image_topics, depth_camera_infos
+ISAAC_ROS_WS = os.getenv('ISAAC_ROS_WS')
+if ISAAC_ROS_WS is None:
+    raise ValueError('ISAAC_ROS_WS env variable is not set')
 
 
-def get_realsense_depth_topics(num_cameras: int) -> Tuple[str, str]:
+def get_realsense_depth_topics(
+    num_cameras: int, enable_dnn_depth_in_realsense: bool
+) -> Tuple[str, str]:
     depth_image_topics = []
     depth_camera_infos = []
     for i in range(num_cameras):
-        depth_image_topics.append(f'/camera_{i+1}/aligned_depth_to_color/image_raw')
-        depth_camera_infos.append(f'/camera_{i+1}/aligned_depth_to_color/camera_info')
+        if not enable_dnn_depth_in_realsense:
+            depth_image_topics.append(f'/camera_{i+1}/aligned_depth_to_color/image_raw')
+            depth_camera_infos.append(f'/camera_{i+1}/aligned_depth_to_color/camera_info')
+        else:
+            depth_image_topics.append(f'/camera_{i+1}/depth_image')
+            depth_camera_infos.append(f'/camera_{i+1}/rgb/camera_info')
     return depth_image_topics, depth_camera_infos
 
 
 def get_isaac_sim_depth_topics() -> Tuple[str, str]:
     depth_image_topics: str = '["/front_stereo_camera/depth/ground_truth"]'
-    depth_camera_infos: str = '["/front_stereo_camera/depth/camera_info"]'
+    depth_camera_infos: str = '["/front_stereo_camera/left/camera_info"]'
     return depth_image_topics, depth_camera_infos
 
 
@@ -52,15 +57,16 @@ def add_cumotion(args: lu.ArgumentContainer) -> List[Action]:
     from_bag = lu.is_true(args.from_bag)
     no_robot_mode = lu.is_true(args.no_robot_mode)
     enable_object_attachment = lu.is_true(args.enable_object_attachment)
+    enable_dnn_depth_in_realsense = lu.is_true(args.enable_dnn_depth_in_realsense)
     workspace_bounds_name = str(args.workspace_bounds_name)
+    read_esdf_world = lu.is_true(args.read_esdf_world)
     actions = []
 
     # Get topics to subscribe
-    if camera_type is CameraType.hawk:
-        depth_image_topics, depth_camera_infos = get_hawk_depth_topics()
-    elif camera_type is CameraType.realsense:
-        depth_image_topics, depth_camera_infos = get_realsense_depth_topics(num_cameras)
-    elif camera_type is CameraType.isaac_sim:
+    if camera_type is CameraType.REALSENSE:
+        depth_image_topics, depth_camera_infos = get_realsense_depth_topics(
+            num_cameras, enable_dnn_depth_in_realsense)
+    elif camera_type is CameraType.ISAAC_SIM:
         depth_image_topics, depth_camera_infos = get_isaac_sim_depth_topics()
     else:
         raise Exception(f'CameraType {camera_type} not implemented.')
@@ -89,9 +95,9 @@ def add_cumotion(args: lu.ArgumentContainer) -> List[Action]:
             'Launching cumotion or esdf visualizer without valid workspace is not allowed.')
     actions.append(
         lu.log_info([
-            "Loading the '", workspace_bounds_name,
-            "' workspace. Ignoring the grid_center_m / grid_size_m parameters of "
-            "cumotion and esdf visualizer."
+            'Loading the ', workspace_bounds_name,
+            ' workspace. Ignoring the grid_center_m and grid_size_m parameters of '
+            'cumotion and esdf visualizer.'
         ]))
 
     # We only enable cumotion if we run live including a robot arm,
@@ -118,9 +124,17 @@ def add_cumotion(args: lu.ArgumentContainer) -> List[Action]:
                     'cumotion_planner.update_link_sphere_server':
                         args.update_link_sphere_server_planner,
                     'cumotion_planner.urdf_path': args.urdf_file_path,
+                    'cumotion_planner.enable_cuda_mps': args.enable_cuda_mps,
+                    'cumotion_planner.cuda_mps_pipe_directory': args.cuda_mps_pipe_directory,
+                    'cumotion_planner.cuda_mps_client_priority':
+                        args.cuda_mps_client_priority_planner,
+                    'cumotion_planner.cuda_mps_active_thread_percentage':
+                        args.cuda_mps_active_thread_percentage_planner,
+                    'cumotion_planner.moveit_collision_objects_scene_file':
+                        args.moveit_collision_objects_scene_file,
                 },
             ))
-    elif not args.disable_esdf_visualizer:
+    else:
         actions.append(
             Node(
                 package='isaac_ros_esdf_visualizer',
@@ -136,7 +150,7 @@ def add_cumotion(args: lu.ArgumentContainer) -> List[Action]:
                 output='screen',
             ))
 
-    if not no_robot_mode:
+    if not no_robot_mode and read_esdf_world:
         actions.append(
             lu.include(
                 'isaac_ros_cumotion',
@@ -159,10 +173,27 @@ def add_cumotion(args: lu.ArgumentContainer) -> List[Action]:
                     'robot_segmenter.urdf_path': args.urdf_file_path,
                     'robot_segmenter.update_link_sphere_server':
                         args.update_link_sphere_server_segmenter,
-                    # TODO: Remove this as this is a No-op  if it is empty which it should be
+                    'robot_segmenter.enable_cuda_mps': args.enable_cuda_mps,
+                    'robot_segmenter.cuda_mps_pipe_directory': args.cuda_mps_pipe_directory,
+                    'robot_segmenter.cuda_mps_client_priority':
+                        args.cuda_mps_client_priority_robot_segmenter,
+                    'robot_segmenter.cuda_mps_active_thread_percentage':
+                        args.cuda_mps_active_thread_percentage_robot_segmenter,
+                    'robot_segmenter.num_cameras': num_cameras,
                 }))
 
     if not no_robot_mode and enable_object_attachment:
+        if read_esdf_world:
+            depth_image_topics_for_attachment = world_depth_publish_topics
+            action_names = args.action_names
+        else:
+            if args.object_attachment_type == 'SPHERE':
+                raise Exception(
+                    'When nvblox is disabled, object_attachment_type must be '
+                    'CUSTOM_MESH or CUBOID.')
+            depth_image_topics_for_attachment = ['']
+            action_names = [args.update_link_sphere_server_planner]
+
         actions.append(
             lu.include(
                 'isaac_ros_cumotion_object_attachment',
@@ -173,10 +204,10 @@ def add_cumotion(args: lu.ArgumentContainer) -> List[Action]:
                     'object_attachment.time_sync_slop': args.time_sync_slop,
                     'object_attachment.filter_depth_buffer_time': args.filter_depth_buffer_time,
                     'object_attachment.joint_states_topic': args.joint_states_topic,
-                    'object_attachment.depth_image_topics': world_depth_publish_topics,
+                    'object_attachment.depth_image_topics': depth_image_topics_for_attachment,
                     'object_attachment.depth_camera_infos': depth_camera_infos,
                     'object_attachment.object_link_name': args.object_link_name,
-                    'object_attachment.action_names': args.action_names,
+                    'object_attachment.action_names': action_names,
                     'object_attachment.search_radius': args.search_radius,
                     'object_attachment.surface_sphere_radius': args.surface_sphere_radius,
                     'object_attachment.clustering_bypass_clustering': args.clustering_bypass,
@@ -196,7 +227,7 @@ def add_cumotion(args: lu.ArgumentContainer) -> List[Action]:
                     'object_attachment.object_esdf_clearing_padding':
                         args.object_esdf_clearing_padding,
                     'object_attachment.trigger_aabb_object_clearing':
-                        args.trigger_aabb_object_clearing
+                        args.trigger_aabb_object_clearing if read_esdf_world else 'false'
                 }))
 
     return actions
@@ -204,21 +235,22 @@ def add_cumotion(args: lu.ArgumentContainer) -> List[Action]:
 
 def generate_launch_description() -> LaunchDescription:
     default_urdf_file_path = os.path.join(
-        get_package_share_directory("isaac_ros_cumotion_robot_description"),
-        "urdf",
-        "ur5e_robotiq_2f_140.urdf",
+        get_package_share_directory('isaac_ros_cumotion_robot_description'),
+        'urdf',
+        'ur5e_robotiq_2f_140.urdf',
     )
 
     default_xrdf_file_path = os.path.join(
-        get_package_share_directory("isaac_ros_cumotion_robot_description"),
-        "xrdf",
-        "ur5e_robotiq_2f_140.xrdf",
+        get_package_share_directory('isaac_ros_cumotion_robot_description'),
+        'xrdf',
+        'ur5e_robotiq_2f_140.xrdf',
     )
 
     args = lu.ArgumentContainer()
     args.add_arg('camera_type')
     args.add_arg('no_robot_mode', False)
     args.add_arg('enable_object_attachment', False)
+    args.add_arg('enable_dnn_depth_in_realsense', False)
     args.add_arg('from_bag', False)
     args.add_arg('num_cameras', 1)
     args.add_arg('workspace_bounds_name', '')
@@ -284,6 +316,11 @@ def generate_launch_description() -> LaunchDescription:
         description='When true, indicates that object attachment should instruct nvblox to clear '
                     'an axis-aligned bounding box (AABB) encompassing the object'
     )
+    args.add_arg(
+        'object_attachment_type',
+        cli=True,
+        default='CUSTOM_MESH',
+        description='Object attachment type')
     args.add_arg(
         'object_link_name',
         cli=True,
@@ -367,10 +404,41 @@ def generate_launch_description() -> LaunchDescription:
                     'meters, for the purpose of ESDF clearing',
     )
     args.add_arg(
-        'disable_esdf_visualizer',
-        default=False,
+        'enable_cuda_mps',
         cli=True,
-        description='If true, disables the ESDF visualizer (useful for testing).')
+        default='False',
+        description='Whether to enable MPS')
+    args.add_arg(
+        'cuda_mps_pipe_directory',
+        cli=True,
+        default=f'{ISAAC_ROS_WS}/mps_pipe_dir',
+        description='The directory for the MPS pipe')
+    args.add_arg(
+        'cuda_mps_client_priority_robot_segmenter',
+        cli=True,
+        default='1',
+        description='The client priority for the MPS for robot segmenter')
+    args.add_arg(
+        'cuda_mps_active_thread_percentage_robot_segmenter',
+        cli=True,
+        default='100',
+        description='The active thread percentage for MPS for robot segmenter')
+    args.add_arg(
+        'cuda_mps_client_priority_planner',
+        cli=True,
+        default='0',
+        description='The client priority for the MPS for cumotion planner')
+    args.add_arg(
+        'cuda_mps_active_thread_percentage_planner',
+        cli=True,
+        default='100',
+        description='The active thread percentage for MPS for cumotion planner')
+    args.add_arg(
+        'moveit_collision_objects_scene_file',
+        cli=True,
+        default='',
+        description='Path to Moveit .scene file with static collision objects to preload'
+    )
 
     args.add_opaque_function(add_cumotion)
     return LaunchDescription(args.get_launch_actions())

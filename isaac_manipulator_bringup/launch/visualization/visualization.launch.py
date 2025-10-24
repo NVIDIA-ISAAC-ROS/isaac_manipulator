@@ -14,11 +14,10 @@
 # limitations under the License.
 #
 # SPDX-License-Identifier: Apache-2.0
+from isaac_manipulator_ros_python_utils.manipulator_types import CameraType
 
-from isaac_ros_launch_utils.all_types import *
 import isaac_ros_launch_utils as lu
-
-from isaac_manipulator_ros_python_utils.types import CameraType
+from isaac_ros_launch_utils.all_types import IfCondition, LaunchDescription
 
 
 def generate_launch_description() -> LaunchDescription:
@@ -29,7 +28,7 @@ def generate_launch_description() -> LaunchDescription:
         description='Whether to run the foxglove bridge for visualization in foxglove.',
         cli=True)
     args.add_arg('run_rviz', True, description='Whether to run rviz2.', cli=True)
-    args.add_arg('camera_type', CameraType.realsense)
+    args.add_arg('camera_type', CameraType.REALSENSE)
     actions = args.get_launch_actions()
 
     actions.append(

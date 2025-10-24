@@ -1,4 +1,0 @@
-# File for hawk specific nvblox parameters.
-/**:
-  ros__parameters:
-    integrate_depth_rate_hz: 40.0

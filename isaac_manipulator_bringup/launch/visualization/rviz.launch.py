@@ -17,10 +17,12 @@
 
 import pathlib
 
-from isaac_ros_launch_utils.all_types import *
-import isaac_ros_launch_utils as lu
+from isaac_manipulator_ros_python_utils.manipulator_types import CameraType
 
-from isaac_manipulator_ros_python_utils.types import CameraType
+import isaac_ros_launch_utils as lu
+from isaac_ros_launch_utils.all_types import (
+    Action, LaunchDescription, Node
+)
 
 
 def add_rviz(args: lu.ArgumentContainer) -> list[Action]:
@@ -29,10 +31,10 @@ def add_rviz(args: lu.ArgumentContainer) -> list[Action]:
     if lu.is_valid(args.rviz_config):
         rviz_config_path = pathlib.Path(args.rviz_config)
     else:
-        if camera_type is CameraType.hawk:
-            rviz_config_name = 'hawk.rviz'
-        elif camera_type is CameraType.realsense:
+        if camera_type is CameraType.REALSENSE:
             rviz_config_name = 'realsense.rviz'
+        elif camera_type is CameraType.ISAAC_SIM:
+            rviz_config_name = 'sim_workflows.rviz'
         else:
             raise Exception(f'CameraType {camera_type} not implemented.')
 
@@ -43,10 +45,10 @@ def add_rviz(args: lu.ArgumentContainer) -> list[Action]:
     assert rviz_config_path.exists(), f'Rviz config {rviz_config_path} does not exist.'
     actions.append(
         Node(
-            package="rviz2",
-            executable="rviz2",
-            arguments=["-d", str(rviz_config_path)],
-            output="screen"))
+            package='rviz2',
+            executable='rviz2',
+            arguments=['-d', str(rviz_config_path)],
+            output='screen'))
     return actions
 
 
@@ -57,7 +59,7 @@ def generate_launch_description() -> LaunchDescription:
         'None',
         description='Path to rviz config (using example config if not set).',
         cli=True)
-    args.add_arg('camera_type', CameraType.realsense)
+    args.add_arg('camera_type', CameraType.REALSENSE)
 
     args.add_opaque_function(add_rviz)
     return LaunchDescription(args.get_launch_actions())

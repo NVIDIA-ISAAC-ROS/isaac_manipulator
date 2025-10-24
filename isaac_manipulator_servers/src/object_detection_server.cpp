@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
-// Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 
 
 #include "isaac_manipulator_servers/object_detection_server.hpp"
+#include "geometry_msgs/msg/point.hpp"
 
 
 namespace nvidia
@@ -36,12 +37,22 @@ ObjectDetectionServer::ObjectDetectionServer(const rclcpp::NodeOptions & options
       "input_detections_topic_name", "detections_output")),
   output_detections_topic_name_(declare_parameter<std::string>(
       "output_detections_topic_name", "object_detection_server/detections_output")),
-  sub_qos_{::isaac_ros::common::AddQosParameter(*this, "SENSOR_DATA", "sub_qos")},
-  pub_qos_{::isaac_ros::common::AddQosParameter(*this, "SENSOR_DATA", "pub_qos")},
+  input_camera_info_topic_name_(declare_parameter<std::string>(
+      "input_camera_info_topic_name", "camera_info")),
+  output_camera_info_topic_name_(declare_parameter<std::string>(
+      "output_camera_info_topic_name", "object_detection_server/camera_info")),
+  input_qos_{::isaac_ros::common::AddQosParameter(
+      *this, "SENSOR_DATA", "input_qos")},
+  result_and_output_qos_{::isaac_ros::common::AddQosParameter(
+      *this, "DEFAULT", "result_and_output_qos")},
   img_pub_(
-    create_publisher<sensor_msgs::msg::Image>(output_img_topic_name_, pub_qos_)),
+    create_publisher<sensor_msgs::msg::Image>(output_img_topic_name_, result_and_output_qos_)),
+  camera_info_pub_(
+    create_publisher<sensor_msgs::msg::CameraInfo>(
+      output_camera_info_topic_name_, result_and_output_qos_)),
   detections_pub_(
-    create_publisher<vision_msgs::msg::Detection2DArray>(output_detections_topic_name_, pub_qos_)),
+    create_publisher<vision_msgs::msg::Detection2DArray>(
+      output_detections_topic_name_, result_and_output_qos_)),
   img_msg_(nullptr),
   detections_msg_(nullptr),
   action_cb_group_(create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive)),
@@ -61,11 +72,14 @@ ObjectDetectionServer::ObjectDetectionServer(const rclcpp::NodeOptions & options
   sub_options.callback_group = subscription_cb_group_;
 
   img_sub_ = create_subscription<sensor_msgs::msg::Image>(
-    input_img_topic_name_, sub_qos_,
+    input_img_topic_name_, input_qos_,
     std::bind(&ObjectDetectionServer::CallbackImg, this, std::placeholders::_1), sub_options);
-
+  camera_info_sub_ = create_subscription<sensor_msgs::msg::CameraInfo>(
+    input_camera_info_topic_name_, input_qos_,
+    std::bind(&ObjectDetectionServer::CallbackCameraInfo, this, std::placeholders::_1),
+    sub_options);
   detections_sub_ = create_subscription<vision_msgs::msg::Detection2DArray>(
-    input_detections_topic_name_, sub_qos_,
+    input_detections_topic_name_, result_and_output_qos_,
     std::bind(&ObjectDetectionServer::CallbackDetections, this, std::placeholders::_1),
     sub_options);
 }
@@ -101,11 +115,13 @@ void ObjectDetectionServer::Execute(
 {
   auto result = std::make_shared<DetectObjects::Result>();
 
-  RCLCPP_INFO(get_logger(), "Executing goal");
+  RCLCPP_INFO(get_logger(), "Executing goal object detection");
 
-  // Wait for the latest image.
-  while (img_msg_ == nullptr && goal_handle->is_executing() && (!goal_handle->is_canceling())) {
-    RCLCPP_DEBUG_ONCE(get_logger(), "Waiting for image");
+  // Wait for the latest image and camera info
+  while ((img_msg_ == nullptr || camera_info_msg_ == nullptr) &&
+    goal_handle->is_executing() && !goal_handle->is_canceling())
+  {
+    RCLCPP_DEBUG_ONCE(get_logger(), "Waiting for image and camera info");
   }
 
   if (goal_handle->is_canceling()) {
@@ -121,6 +137,14 @@ void ObjectDetectionServer::Execute(
     img_msg_.reset();
 
     RCLCPP_INFO(get_logger(), "Image Published waiting for detections");
+  }
+
+  if (camera_info_msg_ != nullptr) {
+    camera_info_pub_->publish(*camera_info_msg_);
+    camera_info_msg_.reset();
+    RCLCPP_INFO(get_logger(), "Camera Info Published");
+  } else {
+    RCLCPP_ERROR(get_logger(), "Camera Info is null");
   }
 
   // Wait for the object detection result. Reset for every new request.
@@ -151,6 +175,13 @@ void ObjectDetectionServer::CallbackImg(const sensor_msgs::msg::Image::ConstShar
   RCLCPP_DEBUG_ONCE(get_logger(), "[CallbackImg] Received image");
 }
 
+void ObjectDetectionServer::CallbackCameraInfo(
+  const sensor_msgs::msg::CameraInfo::ConstSharedPtr & msg_ptr)
+{
+  camera_info_msg_ = msg_ptr;
+  RCLCPP_DEBUG_ONCE(get_logger(), "[CallbackCameraInfo] Received Camera Info");
+}
+
 void ObjectDetectionServer::CallbackDetections(
   const vision_msgs::msg::Detection2DArray::ConstSharedPtr & msg_ptr)
 {
@@ -163,7 +194,6 @@ void ObjectDetectionServer::ClearAllMsgs()
   img_msg_.reset();
   detections_msg_.reset();
 }
-
 
 }  // namespace manipulation
 }  // namespace isaac

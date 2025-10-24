@@ -7,6 +7,7 @@
 # - adjusted decay parameters
 /**:
   ros__parameters:
+    cuda_stream_type: 2  # 0: cuda default stream, 1: blocking async stream, 2: non blocking async stream, 3: per-thread default stream.
     # miscellaneous
     voxel_size: 0.01
     num_cameras: 1
@@ -16,7 +17,6 @@
     # Parameters governing frequency of different processing steps in the reconstruction pipeline.
     # Processing happens every n:th tick_period. <=0 means that no processing take place
     tick_period_ms: 10
-    integrate_depth_rate_hz: 40.0
     integrate_color_rate_hz: 5.0
     update_mesh_rate_hz: 0.0
     update_esdf_rate_hz: 0.0 # Esdf is updated on EsdfAndGradients service request.

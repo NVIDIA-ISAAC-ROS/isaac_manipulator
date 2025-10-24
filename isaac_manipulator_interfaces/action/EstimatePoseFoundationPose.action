@@ -3,6 +3,19 @@
 # Region of interest to detect pose in the image space
 vision_msgs/Detection2D roi
 
+# Option to toggle mask or roi
+bool use_segmentation_mask 
+
+# Use segmentation mask as roi
+sensor_msgs/Image segmentation_mask
+
+# Mesh file path to pass to the foundation pose node(optional)
+# If left empty, then default mesh file of foundation pose node will be used
+string mesh_file_path
+
+# Frame name to be used when foundation pose publishes the pose to tf (optional)
+string object_frame_name
+
 ---
 # Result
 

@@ -31,14 +31,24 @@ namespace manipulation
 
 enum class PoseEstimationBackend
 {
-  FOUNDATION_POSE,
-  DOPE
+  DOPE,
+  FOUNDATION_POSE
 };
 
 enum class ObjectDetectionBackend
 {
+  DOPE,
+  GROUNDING_DINO,
   RT_DETR,
-  DOPE
+  SEGMENT_ANYTHING,
+  SEGMENT_ANYTHING2
+};
+
+enum class SegmentationBackend
+{
+  SEGMENT_ANYTHING,
+  SEGMENT_ANYTHING2,
+  NONE
 };
 
 }  // namespace manipulation

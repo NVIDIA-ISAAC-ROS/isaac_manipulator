@@ -1,0 +1,12 @@
+# Request
+
+# ObjectID
+int32 object_id
+---
+# Result
+
+# Segmentation Mask
+bool has_segmentation_mask
+---
+# Feedback
+int32 progress
