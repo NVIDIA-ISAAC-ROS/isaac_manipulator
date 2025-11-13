@@ -51,7 +51,7 @@ get_isaac_ros_asset_install_script_path(install_ess_models_script install_ess_mo
 ament_add_test(setup_ess_models
     COMMAND "${install_ess_models_script}"
     ENV "ISAAC_ROS_SKIP_ASSET_INSTALL="
-    TIMEOUT 200
+    TIMEOUT 1200
     GENERATE_RESULT_FOR_RETURN_CODE_ZERO
 )
 
