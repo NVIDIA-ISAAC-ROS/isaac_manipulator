@@ -167,6 +167,33 @@ class IsaacROSSegmentAnythingTest(IsaacROSBaseTest):
             goal_msg.initial_hint_point = Point2D(x=IMAGE_WIDTH/2, y=IMAGE_HEIGHT/2)
             goal_msg.use_point_hint = True
 
+            # Wait for the node under test to subscribe to our publishers
+            end_time = time.time() + TIMEOUT
+            while time.time() < end_time and (
+                image_pub.get_subscription_count() == 0 or
+                camera_info_pub.get_subscription_count() == 0
+            ):
+                rclpy.spin_once(self.node, timeout_sec=0.1)
+
+            self.assertGreater(image_pub.get_subscription_count(), 0,
+                               'Node under test did not subscribe to image topic in time')
+            self.assertGreater(camera_info_pub.get_subscription_count(), 0,
+                               'Node under test did not subscribe to camera_info topic in time')
+
+            # Allow subscriber to fully initialize after discovery
+            for _ in range(5):
+                rclpy.spin_once(self.node, timeout_sec=0.1)
+
+            # Publish messages before sending goal
+            image_pub.publish(image_msg)
+            camera_info_pub.publish(camera_info_msg)
+            segmentation_mask_pub.publish(mask_msg)
+            detections_pub.publish(detections_msg)
+
+            # Allow messages to be processed
+            for _ in range(5):
+                rclpy.spin_once(self.node, timeout_sec=0.1)
+
             future = action_client.send_goal_async(goal_msg)
             start_time = time.time()
             while not future.done() and time.time() - start_time < TIMEOUT:

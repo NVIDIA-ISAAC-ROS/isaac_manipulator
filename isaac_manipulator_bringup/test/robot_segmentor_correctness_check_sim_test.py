@@ -60,6 +60,8 @@ def generate_test_description():
     )
     params = load_yaml_params(test_yaml_config)
 
+    params['enable_nvblox'] = 'true'
+
     if not os.path.exists(OUTPUT_DIR):
         os.makedirs(OUTPUT_DIR)
 

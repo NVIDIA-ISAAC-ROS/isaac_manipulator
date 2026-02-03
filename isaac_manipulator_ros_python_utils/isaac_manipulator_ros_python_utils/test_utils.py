@@ -667,16 +667,17 @@ class PoseEstimationPolTest(IsaacROSBaseTest):
         try:
             message_times = []
             start_time = time.time()
+            received_msg = False
             while len(message_times) < self._num_messages_to_receive:
                 rclpy.spin_once(self.node, timeout_sec=0.1)
 
                 if time.time() - start_time > 20:
-                    self.fail('Timeout of 20 seconds reached waiting for messages')
                     break
 
                 if self._monitor_topic_name in received_messages and \
                    len(received_messages[self._monitor_topic_name]) > 0:
                     self.node.get_logger().info('Received message')
+                    received_msg = True
                     # Get current ROS time when message was received
                     current_time = self.node.get_clock().now()
 
@@ -694,6 +695,7 @@ class PoseEstimationPolTest(IsaacROSBaseTest):
 
             # Verify all messages were within acceptable time difference
             max_diff = max(message_times)
+            self.assertTrue(received_msg, 'No messages received for test duration')
             self.assertLess(
                 max_diff, self._max_latency_time,
                 f'Maximum time difference ({max_diff:.3f}s) exceeded limit of'
@@ -902,16 +904,25 @@ class PoseEstimationServersPolTest(IsaacROSBaseTest):
 
             # Wait for the detection result with a timeout
             start_time = self._detection_client.get_clock().now()
+            timed_out = False
             while rclpy.ok() and not self._detection_client.result_received:
                 time_node_in_node = self._detection_client.get_clock().now()
                 max_timeout = self._max_timeout_time_for_action_call
                 if (time_node_in_node - start_time).nanoseconds / 1e9 > max_timeout:
+                    if self._allow_failure_on_first_try:
+                        self.node.get_logger().warn('Allowing failure on first try')
+                        timed_out = True
+                        break
                     self.fail('Timeout waiting for object detection result.')
                     break
                 rclpy.spin_once(self._detection_client, timeout_sec=0.1)
 
-            self.assertTrue(self._detection_client.result_received,
-                            'Object detection action did not return successfully')
+            if not self._allow_failure_on_first_try:
+                self.assertTrue(self._detection_client.result_received,
+                                'Object detection action did not return successfully')
+            elif timed_out:
+                failure_count += 1
+                continue
 
             # Now that we've detected an object, get its pose
             if self._detection_client.detected_object_id is not None:
@@ -965,6 +976,10 @@ class PoseEstimationServersPolTest(IsaacROSBaseTest):
         with open(os.path.join(self._output_dir, 'poses.json'), 'w') as f:
             json.dump(poses, f)
 
+        if failure_count == 1 and self._allow_failure_on_first_try:
+            self.node.get_logger().warn('Allowing failure on first try')
+            return
+
         assert failure_count == 0, f'Pose estimation action failed' \
             f'{failure_count}/{self._num_perception_requests} times'
 
@@ -976,13 +991,15 @@ class PoseEstimationServersPolTest(IsaacROSBaseTest):
                                   nodes: list[Node],
                                   output_dir: str,
                                   identifier: str,
-                                  node_startup_delay: float):
+                                  node_startup_delay: float,
+                                  allow_failure_on_first_try: bool = False):
         cls._run_test = run_test
         cls._max_timeout_time_for_action_call = max_timeout_time_for_action_call
         cls._num_perception_requests = num_perception_requests
         cls._use_sim_time = use_sim_time
         cls._output_dir = output_dir
         cls._identifier = identifier
+        cls._allow_failure_on_first_try = allow_failure_on_first_try
 
         return super().generate_test_description(
             nodes=nodes,

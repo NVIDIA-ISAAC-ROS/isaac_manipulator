@@ -71,6 +71,10 @@ def launch_setup(context, *args, **kwargs):
     dropped_camera_info_topic_name = camera_info_input_topic
     dropped_depth_topic_name = depth_topic_name
 
+    enforce_max_latency = True
+    if context.perform_substitution(LaunchConfiguration('use_sim_time')) == 'true':
+        enforce_max_latency = False
+
     if is_object_following == 'True':
         dropped_image_topic_name = '/grounding_dino/image_dropped'
         dropped_camera_info_topic_name = '/grounding_dino/camera_info_dropped'
@@ -90,7 +94,7 @@ def launch_setup(context, *args, **kwargs):
                 'output_queue_size': 1,
                 'sync_queue_size': 5,
                 'max_latency_threshold': 0.1,
-                'enforce_max_latency': True,
+                'enforce_max_latency': enforce_max_latency,
             }],
             remappings=[
                 ('image_1', image_input_topic),

@@ -14,11 +14,7 @@
 # limitations under the License.
 #
 # SPDX-License-Identifier: Apache-2.0
-"""
-Tests the entire stack on pose estimation run using RealSense camera.
-
-Verifies latency and hz.
-"""
+"""Tests if object detection is working correctly for the RealSense camera."""
 
 import os
 
@@ -26,28 +22,22 @@ from ament_index_python.packages import get_package_share_directory
 from isaac_manipulator_ros_python_utils import (
     get_params_from_config_file_set_in_env
 )
-from isaac_manipulator_ros_python_utils.test_utils import (
-    PoseEstimationServersPolTest
-)
+from isaac_manipulator_ros_python_utils.test_utils import IsaacROSFoundationPoseEstimationPolTest
 from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
-
 import pytest
 
+from vision_msgs.msg import Detection2DArray
 
-RUN_TEST = os.environ.get('ENABLE_MANIPULATOR_TESTING', '').lower() == 'on_robot'
-ISAAC_ROS_WS = os.environ.get('ISAAC_ROS_WS')
-if ISAAC_ROS_WS is None:
-    raise ValueError('ISAAC_ROS_WS is not set')
-OUTPUT_DIR = os.environ.get('OUTPUT_DIR',
-                            f'{ISAAC_ROS_WS}/grounding_dino_realsense_pose')
+
+RUN_TEST = os.environ.get('ENABLE_MANIPULATOR_TESTING', '').lower() == 'isaac_sim'
 
 
 @pytest.mark.rostest
 def generate_test_description():
-    """Generate launch description with Foundation Pose nodes for testing."""
-    PoseEstimationServersPolTest.generate_namespace()
+    """Generate launch description with object detection nodes for testing."""
+    IsaacROSFoundationPoseEstimationPolTest.generate_namespace()
     isaac_manipulator_workflow_bringup_include_dir = os.path.join(
         get_package_share_directory('isaac_manipulator_bringup'),
         'launch', 'workflows')
@@ -56,22 +46,14 @@ def generate_test_description():
         'launch', 'sensors')
 
     params = get_params_from_config_file_set_in_env(RUN_TEST)
-
-    if not os.path.exists(OUTPUT_DIR):
-        os.makedirs(OUTPUT_DIR)
-
-    # Override params to be PICK and PLACE
-    override_params = {
-        'object_detection_type': 'GROUNDING_DINO',
-        'workflow_type': 'PICK_AND_PLACE',
-        'camera_type': 'REALSENSE',
-        'manual_mode': 'true'
-    }
-    params.update(override_params)
+    params.update({'object_detection_type': 'GROUNDING_DINO'})
+    params.update({'camera_type': 'ISAAC_SIM'})
+    params.update({'workflow_type': 'OBJECT_FOLLOWING'})
 
     # Set up container for our nodes
     test_nodes = []
     node_startup_delay = 1.0
+
     if RUN_TEST:
         grounding_dino_model_path = params['grounding_dino_engine_file_path']
         if not os.path.exists(grounding_dino_model_path):
@@ -82,6 +64,7 @@ def generate_test_description():
             PythonLaunchDescriptionSource(
                 [isaac_manipulator_workflow_bringup_include_dir, '/core.launch.py']),
             launch_arguments={key: str(value) for key, value in params.items()}.items()))
+
         test_nodes.append(IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                 [sensor_include_dir, '/cameras.launch.py']),
@@ -96,14 +79,13 @@ def generate_test_description():
             arguments=['0', '0', '0', '0', '0', '0', 'world', 'base_link']
         ))
 
-    return PoseEstimationServersPolTest.generate_test_description(
+    return IsaacROSFoundationPoseEstimationPolTest.generate_test_description(
         run_test=RUN_TEST,
         nodes=test_nodes,
         node_startup_delay=node_startup_delay,
-        max_timeout_time_for_action_call=10.0,
-        num_perception_requests=10,
-        use_sim_time=False,
-        output_dir=OUTPUT_DIR,
-        identifier='grounding_dino_realsense_pose',
-        allow_failure_on_first_try=True
+        monitor_topic_name='detections_output',
+        max_latency_time=0.6,
+        num_messages_to_receive=1000,
+        use_sim_time=True,
+        message_type=Detection2DArray
     )

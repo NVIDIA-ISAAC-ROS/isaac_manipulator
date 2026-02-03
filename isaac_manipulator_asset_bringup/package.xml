@@ -21,7 +21,7 @@ SPDX-License-Identifier: Apache-2.0
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>isaac_manipulator_asset_bringup</name>
-  <version>4.0.0</version>
+  <version>4.1.0</version>
   <description>Asset bringup package for Isaac Manipulator</description>
   <maintainer email="isaac-ros-maintainers@nvidia.com">Isaac ROS Maintainers</maintainer>
   <license>Apache-2.0</license>
@@ -31,12 +31,7 @@ SPDX-License-Identifier: Apache-2.0
   <depend>isaac_ros_dope</depend>
 
   <exec_depend>isaac_common_py</exec_depend>
-
-  <!-- NOTE: The following dependencies are needed but commented out -->
-  <!-- because bloom-generate cannot yet handle pip dependencies correctly. -->
-  <!-- For now the dependencies will have to be installed manually with the -->
-  <!-- provided requirements.txt file. -->
-  <!-- <exec_depend>python3-gdown-pip</exec_depend> -->
+  <exec_depend>python3-gdown</exec_depend>
 
   <test_depend>isaac_ros_test_cmake</test_depend>
   <test_depend>ament_lint_auto</test_depend>

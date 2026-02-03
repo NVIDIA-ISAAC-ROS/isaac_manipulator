@@ -30,7 +30,7 @@ cumotion_urdf_file_path: $(ros2 pkg prefix --share isaac_ros_cumotion_robot_desc
 cumotion_xrdf_file_path: $(ros2 pkg prefix --share isaac_ros_cumotion_robot_description)/xrdf/ur10e_robotiq_2f_140.xrdf
 distance_threshold: 0.05
 # Enable/disable nvblox for 3D scene reconstruction and dynamic collision avoidance
-enable_nvblox: 'false'
+enable_nvblox: 'true'
 
 # Visualization
 rviz_config_file: $(ros2 pkg prefix --share isaac_manipulator_bringup)/config/visualization/sim_workflows.rviz

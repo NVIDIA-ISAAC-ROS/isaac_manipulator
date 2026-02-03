@@ -2,7 +2,7 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>isaac_manipulator_orchestration</name>
-  <version>4.0.0</version>
+  <version>4.1.0</version>
   <description>Reference orchestration package for Isaac Manipulator</description>
   <maintainer email="isaac-ros-maintainers@nvidia.com">Isaac ROS Maintainers</maintainer>
   <license>Apache-2.0</license>
@@ -15,9 +15,11 @@
   <depend>isaac_manipulator_robot_description</depend>
   <depend>isaac_ros_cumotion_interfaces</depend>
   <depend>isaac_ros_test</depend>
+  <depend>control_msgs</depend>
   <depend>py_trees</depend>
   <depend>py_trees_ros</depend>
   <depend>py_trees_ros_viewer</depend>
+  <depend>python3-scipy</depend>
   <depend>rclpy</depend>
 
   <exec_depend>ros2launch</exec_depend>

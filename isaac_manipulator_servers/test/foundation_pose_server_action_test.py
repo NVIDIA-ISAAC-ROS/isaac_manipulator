@@ -218,6 +218,38 @@ class IsaacROSFoundationPoseServerTest(IsaacROSBaseTest):
             goal_msg.object_frame_name = 'object_frame'
             goal_msg.mesh_file_path = 'test_mesh.obj'
 
+            # Wait for the node under test to subscribe to our publishers
+            end_time = time.time() + TIMEOUT
+            while time.time() < end_time and (
+                image_pub.get_subscription_count() == 0 or
+                camera_info_pub.get_subscription_count() == 0 or
+                depth_pub.get_subscription_count() == 0
+            ):
+                rclpy.spin_once(self.node, timeout_sec=0.1)
+                rclpy.spin_once(mock_foundation_pose_node, timeout_sec=0.1)
+
+            self.assertGreater(image_pub.get_subscription_count(), 0,
+                               'Node under test did not subscribe to image topic in time')
+            self.assertGreater(camera_info_pub.get_subscription_count(), 0,
+                               'Node under test did not subscribe to camera_info topic in time')
+            self.assertGreater(depth_pub.get_subscription_count(), 0,
+                               'Node under test did not subscribe to depth topic in time')
+
+            # Allow subscriber to fully initialize after discovery
+            for _ in range(5):
+                rclpy.spin_once(self.node, timeout_sec=0.1)
+                rclpy.spin_once(mock_foundation_pose_node, timeout_sec=0.1)
+
+            # Publish messages before sending goal
+            depth_pub.publish(depth_msg)
+            image_pub.publish(image_msg)
+            camera_info_pub.publish(camera_info_msg)
+
+            # Allow messages to be processed
+            for _ in range(5):
+                rclpy.spin_once(self.node, timeout_sec=0.1)
+                rclpy.spin_once(mock_foundation_pose_node, timeout_sec=0.1)
+
             future = action_client.send_goal_async(goal_msg)
             start_time = time.time()
             while not future.done() and time.time() - start_time < TIMEOUT:
@@ -396,6 +428,38 @@ class IsaacROSFoundationPoseServerTest(IsaacROSBaseTest):
             goal_msg = EstimatePoseFoundationPose.Goal()
             goal_msg.roi = detection_msg
             goal_msg.use_segmentation_mask = False
+
+            # Wait for the node under test to subscribe to our publishers
+            end_time = time.time() + TIMEOUT
+            while time.time() < end_time and (
+                image_pub.get_subscription_count() == 0 or
+                camera_info_pub.get_subscription_count() == 0 or
+                depth_pub.get_subscription_count() == 0
+            ):
+                rclpy.spin_once(self.node, timeout_sec=0.1)
+                rclpy.spin_once(mock_foundation_pose_node, timeout_sec=0.1)
+
+            self.assertGreater(image_pub.get_subscription_count(), 0,
+                               'Node under test did not subscribe to image topic in time')
+            self.assertGreater(camera_info_pub.get_subscription_count(), 0,
+                               'Node under test did not subscribe to camera_info topic in time')
+            self.assertGreater(depth_pub.get_subscription_count(), 0,
+                               'Node under test did not subscribe to depth topic in time')
+
+            # Allow subscriber to fully initialize after discovery
+            for _ in range(5):
+                rclpy.spin_once(self.node, timeout_sec=0.1)
+                rclpy.spin_once(mock_foundation_pose_node, timeout_sec=0.1)
+
+            # Publish messages before sending goal
+            depth_pub.publish(depth_msg)
+            image_pub.publish(image_msg)
+            camera_info_pub.publish(camera_info_msg)
+
+            # Allow messages to be processed
+            for _ in range(5):
+                rclpy.spin_once(self.node, timeout_sec=0.1)
+                rclpy.spin_once(mock_foundation_pose_node, timeout_sec=0.1)
 
             future = action_client.send_goal_async(goal_msg)
             start_time = time.time()

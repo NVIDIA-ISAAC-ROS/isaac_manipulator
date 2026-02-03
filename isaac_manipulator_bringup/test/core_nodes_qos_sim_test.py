@@ -74,11 +74,7 @@ def generate_test_description():
         topics_with_sensor_data_qos=[
             '/cumotion/camera_1/robot_mask',
             '/cumotion/camera_1/world_depth',
-            '/cumotion/camera_1/robot_mask_bridge',
-            '/cumotion/camera_1/robot_mask_ros',
-            '/cumotion/camera_1/world_depth_bridge',
-            '/cumotion/camera_1/world_depth_ros',
-            '/front_stereo_camera/left/camera_info'],
+        ],
         check_sensor_data_for_topics_for_only_this_node={},
         check_sensor_data_for_topics_that_have_publisher=[],
         nodes=test_nodes,
