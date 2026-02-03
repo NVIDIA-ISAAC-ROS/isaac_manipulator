@@ -66,6 +66,10 @@ def launch_setup(context, *args, **kwargs):
     unscaled_detections_rtdetr_topic = 'unscaled_detections_rtdetr'
     filtered_detection2_d_topic = 'filtered_detection2_d'
 
+    enforce_max_latency = True
+    if context.perform_substitution(LaunchConfiguration('use_sim_time')) == 'true':
+        enforce_max_latency = False
+
     if rtdetr_is_object_following == 'True':
         dropped_image_topic_name = '/rtdetr/image_dropped'
         dropped_camera_info_topic_name = '/rtdetr/camera_info_dropped'
@@ -85,7 +89,7 @@ def launch_setup(context, *args, **kwargs):
                 'output_queue_size': 1,
                 'sync_queue_size': 5,
                 'max_latency_threshold': 0.1,
-                'enforce_max_latency': True,
+                'enforce_max_latency': enforce_max_latency,
             }],
             remappings=[
                 ('image_1', image_input_topic),

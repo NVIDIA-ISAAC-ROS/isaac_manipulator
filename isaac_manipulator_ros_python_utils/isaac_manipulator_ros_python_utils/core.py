@@ -274,7 +274,7 @@ def get_cumotion_node(
             'urdf_file_path': urdf_file_path,
             # This allows for nvblox to work well with Isaac Sim and not reject depth frames
             # from robot segmentor due to DDS drops/fluctuations.
-            'qos_setting': 'SENSOR_DATA',
+            'qos_setting': 'DEFAULT' if use_sim_time else 'SENSOR_DATA',
             'enable_object_attachment': enable_object_attachment,
             'object_attachment_type': object_attachment_type,
             'workspace_bounds_name': setup,

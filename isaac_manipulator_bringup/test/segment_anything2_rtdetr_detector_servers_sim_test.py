@@ -32,7 +32,7 @@ from launch_ros.actions import Node
 import pytest
 
 
-RUN_TEST = os.environ.get('ENABLE_MANIPULATOR_TESTING', '').lower() == 'on_robot'
+RUN_TEST = os.environ.get('ENABLE_MANIPULATOR_TESTING', '').lower() == 'isaac_sim'
 ISAAC_ROS_WS = os.environ.get('ISAAC_ROS_WS')
 OUTPUT_DIR = os.path.join(
     ISAAC_ROS_WS,
@@ -60,7 +60,7 @@ def generate_test_description():
         'workflow_type': 'PICK_AND_PLACE',
         'manual_mode': 'true',
         'enable_nvblox': 'false',
-        'camera_type': 'REALSENSE'
+        'camera_type': 'ISAAC_SIM'
     }
     params.update(overide_params)
 
@@ -109,6 +109,6 @@ def generate_test_description():
         initial_hint=None,
         mesh_file_path=mesh_file_path,
         max_timeout_time_for_action_call=10.0,
-        use_sim_time=False,
+        use_sim_time=True,
         output_dir=OUTPUT_DIR,
     )

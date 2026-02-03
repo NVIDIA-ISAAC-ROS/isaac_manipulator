@@ -49,6 +49,7 @@ def launch_setup(context: LaunchContext, *args, **kwargs) -> List[Node]:
     image_width = LaunchConfiguration('image_width')
     image_height = LaunchConfiguration('image_height')
     frequency = LaunchConfiguration('frequency')
+    calibration_name = LaunchConfiguration('calibration_name')
 
     nodes = []
 
@@ -67,7 +68,7 @@ def launch_setup(context: LaunchContext, *args, **kwargs) -> List[Node]:
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource([launch_dir, '/include/realsense.launch.py']),
             launch_arguments={
-                'camera_ids_config_name': 'hubble_ur10e_test_bench',
+                'camera_ids_config_name': calibration_name,
             }.items()
         )
     )
@@ -127,7 +128,7 @@ def launch_setup(context: LaunchContext, *args, **kwargs) -> List[Node]:
             launch_arguments={
                 'camera_type': str(CameraType.REALSENSE),
                 'tracking_type': str(TrackingType.GEAR_ASSEMBLY),
-                'calibration_name': 'hubble_ur10e_test_bench',
+                'calibration_name': calibration_name,
             }.items(),
         )
     )
@@ -207,6 +208,10 @@ def generate_launch_description():
             'frequency',
             default_value='30.0',
             description='Inference frequency',
+        ),
+        DeclareLaunchArgument(
+            'calibration_name',
+            description='Name of the calibration setup (eg: hubble_ur10e_test_bench)',
         ),
     ]
     return LaunchDescription(launch_args + [OpaqueFunction(function=launch_setup)])

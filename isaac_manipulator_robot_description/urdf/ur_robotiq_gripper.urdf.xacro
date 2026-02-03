@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://wiki.ros.org/xacro" name="robotiq_gripper">
     <!-- parameters -->
-    <xacro:arg name="use_fake_hardware" default="false" />
+    <xacro:arg name="use_mock_hardware" default="false" />
     <xacro:arg name="com_port" default="/tmp/ttyUR" />
     <xacro:arg name="gripper_speed" default="0.150" /> <!-- unknown -->
     <xacro:arg name="gripper_max_speed" default="0.150" /> <!-- unknown -->
@@ -30,7 +30,7 @@
     <xacro:robotiq_gripper name="robotiq_gripper_node"
         prefix=""
         parent="tool0"
-        use_fake_hardware="$(arg use_fake_hardware)"
+        use_fake_hardware="$(arg use_mock_hardware)"
         com_port="$(arg com_port)"
         sim_isaac="$(arg sim_isaac)"
         include_ros2_control="$(arg generate_ros2_control_tag)">

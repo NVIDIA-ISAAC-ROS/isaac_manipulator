@@ -136,6 +136,7 @@ def get_robot_description_contents_for_sim(
         'name': f'{ur_type}_robot',
         'sim_isaac': 'true' if use_sim_time else 'false',
         'use_fake_hardware': 'true' if use_sim_time else 'false',
+        'use_mock_hardware': 'true' if use_sim_time else 'false',
         'generate_ros2_control_tag': 'false' if use_sim_time else 'true',
         'gripper_type': gripper_type,
         'grasp_parent_frame': grasp_parent_frame,

@@ -108,6 +108,6 @@ def generate_test_description():
         initial_hint=None,  # User supplied initial hint for object
         mesh_file_path=mesh_file_path,
         max_timeout_time_for_action_call=10.0,
-        use_sim_time=True,
+        use_sim_time=False,
         output_dir=OUTPUT_DIR,
     )

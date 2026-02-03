@@ -46,6 +46,7 @@ class ModelType(Enum):
     FOUNDATIONPOSE = 'foundationpose'
     DOPE = 'dope'
     SEGMENT_ANYTHING = 'segment_anything'
+    SEGMENT_ANYTHING2 = 'segment_anything2'
     GEAR_ASSEMBLY = 'gear_assembly'
     ALL = 'all'
 
@@ -407,6 +408,165 @@ class ModelSetup:
 
         return True
 
+    def setup_sam2_model(self) -> bool:
+        """
+        Download and set up the Segment Anything 2 (SAM2) model.
+
+        Downloads the model file, converts it to ONNX format on x86 platforms,
+        and sets up the config files and warmup data.
+
+        Returns
+        -------
+        bool
+            True if setup was successful, False otherwise
+
+        """
+        self.logger.info('=== Setting up SAM2 model ===')
+
+        # Create directories
+        sam2_dir = self.assets_dir / 'isaac_ros_segment_anything2'
+        sam2_dir.mkdir(parents=True, exist_ok=True)
+
+        models_sam2_dir = self.models_dir / 'segment_anything2' / '1'
+        models_sam2_dir.mkdir(parents=True, exist_ok=True)
+
+        # Download the PyTorch weights from official SAM2 repo
+        pth_url = 'https://dl.fbaipublicfiles.com/segment_anything_2/092824/sam2.1_hiera_tiny.pt'
+        pth_path = sam2_dir / 'sam2.1_hiera_tiny.pt'
+
+        if not pth_path.exists() or self.force:
+            self.logger.info(f'Downloading SAM2 model from {pth_url}...')
+            if not self.download_file(pth_url, pth_path):
+                self.logger.error('Failed to download SAM2 model')
+                return False
+            self.logger.info(f'SAM2 model downloaded to {pth_path}')
+        else:
+            self.logger.info(f'SAM2 model already exists at {pth_path} - Skipping download')
+
+        # Check if platform is x86 for ONNX conversion
+        import platform
+        is_x86 = platform.machine() in ['x86_64', 'AMD64', 'i386', 'i686']
+
+        onnx_path = models_sam2_dir / 'model.onnx'
+        if is_x86 and (not onnx_path.exists() or self.force):
+            # Install sam2 package if not already installed
+            try:
+                import sam2  # noqa: F401
+            except ImportError:
+                self.logger.info('Installing sam2 package...')
+                install_cmd = [
+                    sys.executable, '-m', 'pip', 'install', '--break-system-packages',
+                    'git+https://github.com/facebookresearch/sam2.git'
+                ]
+                try:
+                    subprocess.check_call(install_cmd)
+                except subprocess.CalledProcessError as e:
+                    self.logger.error(f'Failed to install sam2 package: {e}')
+                    return False
+
+            # Install onnxconverter-common for fp16 conversion
+            try:
+                import onnxconverter_common  # noqa: F401
+            except ImportError:
+                self.logger.info('Installing onnxconverter-common for fp16 conversion...')
+                install_cmd = [
+                    sys.executable, '-m', 'pip', 'install', '--break-system-packages',
+                    'onnxconverter-common==1.14.0'
+                ]
+                try:
+                    subprocess.check_call(install_cmd)
+                except subprocess.CalledProcessError as e:
+                    self.logger.warning(f'Failed to install onnxconverter-common: {e}')
+                    # Continue anyway, fp32 conversion will still work
+
+            self.logger.info('Converting PyTorch model to ONNX format (fp16)...')
+            cmd = [
+                'ros2', 'run', 'isaac_ros_segment_anything2', 'sam2_onnx_exporter.py',
+                '--checkpoint', str(pth_path),
+                '--output', str(onnx_path),
+                '--fp16'
+            ]
+
+            if not self.run_command('Convert SAM2 to ONNX', cmd):
+                self.logger.error('Failed to convert SAM2 model to ONNX format')
+                return False
+            self.logger.info(f'SAM2 model converted to ONNX at {onnx_path}')
+        elif not is_x86:
+            self.logger.info('Skipping ONNX conversion as platform is not x86')
+        else:
+            self.logger.info(f'ONNX model already exists at {onnx_path} - Skipping conversion')
+
+        # Copy the config file
+        config_src = sam2_dir / 'sam2_config.pbtxt'
+        config_dst = self.models_dir / 'segment_anything2' / 'config.pbtxt'
+
+        if (not config_dst.exists() and config_src.exists()) or self.force:
+            self.logger.info(f'Copying config file from {config_src} to {config_dst}')
+            try:
+                shutil.copy2(config_src, config_dst)
+                self.logger.info('Config file copied successfully')
+            except Exception as e:
+                self.logger.error(f'Failed to copy config file: {e}')
+                return False
+        elif not config_src.exists():
+            self.logger.warning(f'Config file not found at {config_src}')
+        else:
+            self.logger.info(f'Config file already exists at {config_dst} - Skipping copy')
+
+        # Copy the warmup data
+        warmup_src = sam2_dir / 'warmup'
+        warmup_dst = self.models_dir / 'segment_anything2' / 'warmup'
+
+        if warmup_src.exists() and (not warmup_dst.exists() or self.force):
+            self.logger.info(f'Copying warmup data from {warmup_src} to {warmup_dst}')
+            try:
+                if warmup_dst.exists():
+                    shutil.rmtree(warmup_dst)
+                shutil.copytree(warmup_src, warmup_dst)
+                self.logger.info('Warmup data copied successfully')
+            except Exception as e:
+                self.logger.error(f'Failed to copy warmup data: {e}')
+                return False
+        elif not warmup_src.exists():
+            self.logger.warning(f'Warmup data not found at {warmup_src}')
+        else:
+            self.logger.info(f'Warmup data already exists at {warmup_dst} - Skipping copy')
+
+        self.logger.info('SAM2 model setup completed successfully')
+        return True
+
+    def setup_segment_anything2(self) -> bool:
+        """
+        Set up the Segment Anything 2 (SAM2) assets and model.
+
+        Returns
+        -------
+        bool
+            True if setup was successful, False otherwise
+
+        """
+        self.logger.info('=== Setting up Segment Anything 2 assets ===')
+
+        # Check if Segment Anything 2 assets already exist
+        sam2_dir = self.assets_dir / 'isaac_ros_segment_anything2'
+
+        if not sam2_dir.exists() or self.force:
+            self.logger.info('Downloading assets for Segment Anything 2...')
+            url = 'https://api.ngc.nvidia.com/v2/resources/org/nvidia/team/isaac/' \
+                  'isaac_ros_segment_anything2_assets/4.0.1/files?redirect=true' \
+                  '&path=quickstart.tar.gz'
+            if not self.process_urls(self.assets_dir, [url], 'quickstart.tar.gz'):
+                return False
+        else:
+            self.logger.info(f'Segment Anything 2 assets already exist at {sam2_dir} - '
+                             'Skipping download')
+
+        # Set up the SAM2 model
+        if not self.setup_sam2_model():
+            return False
+
+        return True
+
     def setup_gear_assembly(self) -> bool:
         """
         Set up the UR DNN Policy assets.
@@ -485,6 +645,8 @@ class ModelSetup:
                 result = self.setup_dope()
             elif model_type == ModelType.SEGMENT_ANYTHING:
                 result = self.setup_segment_anything()
+            elif model_type == ModelType.SEGMENT_ANYTHING2:
+                result = self.setup_segment_anything2()
             elif model_type == ModelType.GEAR_ASSEMBLY:
                 result = self.setup_gear_assembly()
             else:

@@ -111,38 +111,6 @@ def add_nvblox(args: lu.ArgumentContainer) -> List[lut.Action]:
     parameters.append(workspace_config)
     parameters.append({'num_cameras': num_cameras})
 
-    nitros_bridge_nodes = []
-
-    for i in range(num_cameras):
-        nitros_bridge_node_depth = lut.ComposableNode(
-            name=f'nitros_bridge_node_depth_{i+1}',
-            package='isaac_ros_nitros_bridge_ros2',
-            plugin='nvidia::isaac_ros::nitros_bridge::ImageConverterNode',
-            parameters=[{
-                'bridge_sub_qos': 'SENSOR_DATA',
-                'nitros_pub_qos': 'SENSOR_DATA'
-            }],
-            remappings=[
-                ('ros2_input_bridge_image', f'/cumotion/camera_{i+1}/world_depth_bridge'),
-                ('ros2_output_image', f'/cumotion/camera_{i+1}/world_depth')]
-        )
-
-        nitros_bridge_node_mask = lut.ComposableNode(
-            name=f'nitros_bridge_node_mask_{i+1}',
-            package='isaac_ros_nitros_bridge_ros2',
-            plugin='nvidia::isaac_ros::nitros_bridge::ImageConverterNode',
-            parameters=[{
-                'bridge_sub_qos': 'SENSOR_DATA',
-                'nitros_pub_qos': 'SENSOR_DATA'
-            }],
-            remappings=[
-                ('ros2_input_bridge_image', f'/cumotion/camera_{i+1}/robot_mask_bridge'),
-                ('ros2_output_image', f'/cumotion/camera_{i+1}/robot_mask')]
-        )
-
-        nitros_bridge_nodes.append(nitros_bridge_node_depth)
-        nitros_bridge_nodes.append(nitros_bridge_node_mask)
-
     nvblox_node = lut.ComposableNode(
         name='nvblox_node',
         package='nvblox_ros',
@@ -150,8 +118,7 @@ def add_nvblox(args: lu.ArgumentContainer) -> List[lut.Action]:
         remappings=remappings,
         parameters=parameters)
 
-    actions.append(lu.load_composable_nodes(args.container_name,
-                                            nitros_bridge_nodes + [nvblox_node]))
+    actions.append(lu.load_composable_nodes(args.container_name, [nvblox_node]))
     actions.append(
         lu.log_info([
             "Enabling nvblox for '",

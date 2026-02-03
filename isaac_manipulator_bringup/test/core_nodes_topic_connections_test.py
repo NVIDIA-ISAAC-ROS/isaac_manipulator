@@ -128,7 +128,6 @@ class CoreNodesTopicConnectionsGraphTest(FoundationPoseTopicConnectionsGraphTest
             {'topic': '/front_stereo_camera/left/camera_info', 'from': []},
             {'topic': '/front_stereo_camera/left/image_raw', 'from': []},
             {'topic': '/front_stereo_camera/left/image_raw/nitros', 'from': []},
-            {'topic': '/pointcloud', 'from': []},
             {'topic': '/pose', 'from': []}
         ])
 

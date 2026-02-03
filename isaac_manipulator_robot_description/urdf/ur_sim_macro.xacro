@@ -69,6 +69,8 @@
     safety_k_position:=20
     use_fake_hardware:=false
     fake_sensor_commands:=false
+    use_mock_hardware:=false
+    mock_sensor_commands:=false
     sim_gazebo:=false
     sim_ignition:=false
     headless_mode:=false
@@ -111,9 +113,9 @@
       <!-- ros2 control instance -->
       <xacro:ur_ros2_control
         name="${name}"
-        use_fake_hardware="${use_fake_hardware}"
+        use_mock_hardware="${use_mock_hardware}"
         initial_positions="${initial_positions}"
-        fake_sensor_commands="${fake_sensor_commands}"
+        mock_sensor_commands="${mock_sensor_commands}"
         headless_mode="${headless_mode}"
         sim_gazebo="${sim_gazebo}"
         sim_ignition="${sim_ignition}"
@@ -150,13 +152,13 @@
     <link name="${tf_prefix}base_link"/>
     <link name="${tf_prefix}base_link_inertia">
       <visual>
-        <origin xyz="0 0 0" rpy="0 0 ${pi}"/>
+        <origin xyz="0 0 0" rpy="0 0 3.14159"/>
         <geometry>
           <xacro:get_mesh name="base" type="visual"/>
         </geometry>
       </visual>
       <collision>
-        <origin xyz="0 0 0" rpy="0 0 ${pi}"/>
+        <origin xyz="0 0 0" rpy="0 0 3.14159"/>
         <geometry>
           <xacro:get_mesh name="base" type="collision"/>
         </geometry>
@@ -167,13 +169,13 @@
     </link>
     <link name="${tf_prefix}shoulder_link">
       <visual>
-        <origin xyz="0 0 0" rpy="0 0 ${pi}"/>
+        <origin xyz="0 0 0" rpy="0 0 3.14159"/>
         <geometry>
           <xacro:get_mesh name="shoulder" type="visual"/>
         </geometry>
       </visual>
       <collision>
-        <origin xyz="0 0 0" rpy="0 0 ${pi}"/>
+        <origin xyz="0 0 0" rpy="0 0 3.14159"/>
         <geometry>
           <xacro:get_mesh name="shoulder" type="collision"/>
         </geometry>
@@ -347,7 +349,7 @@
            Use the joint between 'base_link' and 'base_link_inertia' (a dummy
            link/frame) to introduce the necessary rotation over Z (of pi rad).
       -->
-      <origin xyz="0 0 0" rpy="0 0 ${pi}" />
+      <origin xyz="0 0 0" rpy="0 0 3.14159" />
     </joint>
     <joint name="${tf_prefix}shoulder_pan_joint" type="revolute">
       <parent link="${tf_prefix}base_link_inertia" />
@@ -434,7 +436,7 @@
     <joint name="${tf_prefix}wrist_3_link-ft_frame" type="fixed">
       <parent link="${tf_prefix}wrist_3_link"/>
       <child link="${tf_prefix}ft_frame"/>
-      <origin xyz="0 0 0" rpy="${pi} 0 0"/>
+      <origin xyz="0 0 0" rpy="3.14159 0 0"/>
     </joint>
 
     <!-- ROS-Industrial 'base' frame - base_link to UR 'Base' Coordinates transform -->
@@ -445,7 +447,7 @@
            to correctly align 'base' with the 'Base' coordinate system of
            the UR controller.
       -->
-      <origin xyz="0 0 0" rpy="0 0 ${pi}"/>
+      <origin xyz="0 0 0" rpy="0 0 3.14159"/>
       <parent link="${tf_prefix}base_link"/>
       <child link="${tf_prefix}base"/>
     </joint>

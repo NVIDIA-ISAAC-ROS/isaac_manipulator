@@ -14,16 +14,13 @@
 # limitations under the License.
 #
 # SPDX-License-Identifier: Apache-2.0
-"""Tests the entire stack with SAM2, RT-DETR, and Foundation Pose using the Realsense."""
+"""Tests the correctness of the robot segmentor for Realsense setup."""
 
 import os
 
 from ament_index_python.packages import get_package_share_directory
-from isaac_manipulator_ros_python_utils import (
-    get_params_from_config_file_set_in_env
-)
 from isaac_manipulator_ros_python_utils.test_utils import (
-    IsaacManipulatorServersPolTest
+    get_params_from_config_file_set_in_env, IsaacManipulatorRobotSegmentorPolTest
 )
 from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -32,60 +29,57 @@ from launch_ros.actions import Node
 import pytest
 
 
-RUN_TEST = os.environ.get('ENABLE_MANIPULATOR_TESTING', '').lower() == 'on_robot'
+RUN_TEST = os.environ.get('ENABLE_MANIPULATOR_TESTING', '').lower() == 'isaac_sim'
 ISAAC_ROS_WS = os.environ.get('ISAAC_ROS_WS')
-OUTPUT_DIR = os.path.join(
-    ISAAC_ROS_WS,
-    'segment_anything2_rtdetr_detector_servers_realsense_test')
+OUTPUT_DIR = os.path.join(ISAAC_ROS_WS, 'robot_segmentor_pol_sim_test')
 
 
 @pytest.mark.rostest
 def generate_test_description():
-    """Generate launch description with Foundation Pose nodes for testing."""
-    IsaacManipulatorServersPolTest.generate_namespace()
+    """Generate launch description with Robot Segmentor nodes for testing."""
+    IsaacManipulatorRobotSegmentorPolTest.generate_namespace()
     isaac_manipulator_workflow_bringup_include_dir = os.path.join(
         get_package_share_directory('isaac_manipulator_bringup'),
         'launch')
+    isaac_manipulator_test_include_dir = os.path.join(
+        get_package_share_directory('isaac_manipulator_bringup'),
+        'test', 'include')
+
     params = get_params_from_config_file_set_in_env(RUN_TEST)
+    params['enable_dnn_depth_in_realsense'] = 'false'
+    params['camera_type'] = 'ISAAC_SIM'
+    params['num_cameras'] = '1'
+    params['enable_nvblox'] = 'true'
+    params['workflow_type'] = 'OBJECT_FOLLOWING'
+    params['use_sim_time'] = 'true'
 
     if not os.path.exists(OUTPUT_DIR):
         os.makedirs(OUTPUT_DIR)
 
-    # Trigger SAM2 detection for pick and place.
-    overide_params = {
-        'segmentation_type': 'SEGMENT_ANYTHING2',
-        'object_detection_type': 'RTDETR',
-        'pose_estimation_type': 'FOUNDATION_POSE',
-        'segment_anything_input_points_topic': 'input_points',
-        'workflow_type': 'PICK_AND_PLACE',
-        'manual_mode': 'true',
-        'enable_nvblox': 'false',
-        'camera_type': 'REALSENSE'
-    }
-    params.update(overide_params)
-
     # Set up container for our nodes
     test_nodes = []
     node_startup_delay = 1.0
-    mesh_file_path = ''
     if RUN_TEST:
-        mesh_file_path = params['foundation_pose_mesh_file_path']
-        segment_anything_model_path = \
-            f'{params["sam_model_repository_paths"][0]}/segment_anything/1/model.onnx'
-        if not os.path.exists(segment_anything_model_path):
-            raise FileNotFoundError(
-                f'Segment Anything model not found at {segment_anything_model_path}')
         node_startup_delay = 12.0
+        # This starts object following without object following nodes.
+        # It starts the pose to pose so that we get planning calls every few seconds
         test_nodes.append(IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
-                [isaac_manipulator_workflow_bringup_include_dir, '/workflows/core.launch.py']),
+                [isaac_manipulator_test_include_dir,
+                 '/cumotion.launch.py']),
             launch_arguments={key: str(value) for key, value in params.items()}.items()))
+
+        test_nodes.append(IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                [isaac_manipulator_workflow_bringup_include_dir,
+                    '/drivers/ur_robotiq_driver.launch.py']),
+            launch_arguments={key: str(value) for key, value in params.items()}.items()))
+
         test_nodes.append(IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                 [isaac_manipulator_workflow_bringup_include_dir,
                     '/sensors/cameras.launch.py']),
             launch_arguments={key: str(value) for key, value in params.items()}.items()))
-
     else:
         # Makes the test pass if we do not want to run on CI
         test_nodes.append(Node(
@@ -96,19 +90,16 @@ def generate_test_description():
             arguments=['0', '0', '0', '0', '0', '0', 'world', 'base_link']
         ))
 
-    return IsaacManipulatorServersPolTest.generate_test_description(
+    return IsaacManipulatorRobotSegmentorPolTest.generate_test_description(
         run_test=RUN_TEST,
         nodes=test_nodes,
         node_startup_delay=node_startup_delay,
-        # Do a GetObjects -> AddSegmentationMask -> AddMeshToObject -> GetObjectPose cycle 10 times
-        num_cycles=10,
-        # RTdetr object detection and segmentation enabled.
-        is_segment_anything_object_detection_enabled=False,
-        is_segment_anything_segmentation_enabled=True,
-        is_rt_detr_object_detection_enabled=True,
-        initial_hint=None,
-        mesh_file_path=mesh_file_path,
-        max_timeout_time_for_action_call=10.0,
-        use_sim_time=False,
+        use_sim_time=True,
         output_dir=OUTPUT_DIR,
+        timeout_seconds_for_service_call=30.0,
+        intrinsics_topics=['/front_stereo_camera/left/camera_info'],
+        input_topics=['/front_stereo_camera/depth/ground_truth'],
+        output_topics=['/cumotion/camera_1/world_depth'],
+        time_to_run=30,
+        max_latency_ms=1000,
     )

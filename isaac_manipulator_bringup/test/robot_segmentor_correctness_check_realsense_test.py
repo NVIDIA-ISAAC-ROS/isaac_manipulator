@@ -52,6 +52,7 @@ def generate_test_description():
     params['camera_type'] = 'REALSENSE'
     params['num_cameras'] = '1'
     params['workflow_type'] = 'OBJECT_FOLLOWING'
+    params['enable_nvblox'] = 'true'
 
     if not os.path.exists(OUTPUT_DIR):
         os.makedirs(OUTPUT_DIR)
@@ -100,7 +101,7 @@ def generate_test_description():
         run_test=RUN_TEST,
         nodes=test_nodes,
         node_startup_delay=node_startup_delay,
-        use_sim_time=True,
+        use_sim_time=False,
         output_dir=OUTPUT_DIR,
         timeout_seconds_for_service_call=30.0,
         links_to_check=['forearm_link', 'upper_arm_link'],
