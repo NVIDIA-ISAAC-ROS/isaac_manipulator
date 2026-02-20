@@ -53,7 +53,7 @@ filter_depth_buffer_time: 0.7
 depth_type: ESS_FULL
 enable_dnn_depth_in_realsense: 'false'
 ess_engine_file_path: $ISAAC_ROS_WS/isaac_ros_assets/models/dnn_stereo_disparity/dnn_stereo_disparity_v4.1.0_onnx_trt10.13/ess.engine
-foundationstereo_engine_file_path: $ISAAC_ROS_WS/isaac_ros_assets/models/foundationstereo/deployable_foundation_stereo_small_v1.0/foundationstereo_320x736.engine
+foundationstereo_engine_file_path: $ISAAC_ROS_WS/isaac_ros_assets/models/foundationstereo/deployable_v2.0/foundationstereo_320x736.engine
 pose_estimation_type: FOUNDATION_POSE
 pose_estimation_input_qos: 'SENSOR_DATA'  # We use DEFAULT here since we use a drop node at the start of RT-DETR-Foundation Pose pipeline limiting hz to 1 hence we dont want to drop any message
 pose_estimation_input_fps: '15'

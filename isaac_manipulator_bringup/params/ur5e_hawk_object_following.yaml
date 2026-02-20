@@ -51,7 +51,7 @@ segment_anything_input_detections_topic: input_detections
 segment_anything_enable_debug_output: 'false'
 sam_model_repository_paths: ['$ISAAC_ROS_WS/isaac_ros_assets/models']
 ess_engine_file_path: $ISAAC_ROS_WS/isaac_ros_assets/models/dnn_stereo_disparity/dnn_stereo_disparity_v4.1.0_onnx_trt10.13/ess.engine
-foundationstereo_engine_file_path: $ISAAC_ROS_WS/isaac_ros_assets/models/foundationstereo/deployable_foundation_stereo_small_v1.0/foundationstereo_320x736.engine
+foundationstereo_engine_file_path: $ISAAC_ROS_WS/isaac_ros_assets/models/foundationstereo/deployable_v2.0/foundationstereo_320x736.engine
 pose_estimation_type: FOUNDATION_POSE
 pose_estimation_input_qos: 'SENSOR_DATA'  # We use DEFAULT here since we use a drop node at the start of RT-DETR-Foundation Pose pipeline limiting hz to 1 hence we dont want to drop any message
 pose_estimation_input_fps: '15' # If for hawk, set to 30

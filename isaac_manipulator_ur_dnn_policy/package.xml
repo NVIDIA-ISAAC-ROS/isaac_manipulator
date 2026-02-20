@@ -21,7 +21,7 @@ SPDX-License-Identifier: Apache-2.0
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>isaac_manipulator_ur_dnn_policy</name>
-  <version>4.1.0</version>
+  <version>4.2.0</version>
   <description>
     Isaac Manipulator UR DNN Policy
   </description>
@@ -44,6 +44,7 @@ SPDX-License-Identifier: Apache-2.0
   <depend>builtin_interfaces</depend>
   <depend>rclpy</depend>
   <depend>rcl_interfaces</depend>
+  <depend>python3-rsl-rl-lib-pip-shim</depend>
   <depend>geometry_msgs</depend>
   <depend>rosbag2_py</depend>
   <depend>sensor_msgs</depend>
