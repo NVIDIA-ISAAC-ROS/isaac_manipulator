@@ -54,7 +54,19 @@ class ModelType(Enum):
 class ModelSetup:
     """Handles the setup of perception deep learning models."""
 
-    def __init__(self, workspace_path: str, verbose: bool = False, force: bool = False):
+    def __init__(
+        self,
+        workspace_path: str,
+        verbose: bool = False,
+        force: bool = False,
+        foundationpose_assets: Optional[Path] = None,
+        dope_assets: Optional[Path] = None,
+        segment_anything_assets: Optional[Path] = None,
+        segment_anything2_assets: Optional[Path] = None,
+        ur_dnn_policy_assets: Optional[Path] = None,
+        sam_model_assets: Optional[Path] = None,
+        sam2_model_assets: Optional[Path] = None
+    ):
         """
         Initialize the model setup tool.
 
@@ -64,6 +76,22 @@ class ModelSetup:
                 Path to the Isaac ROS workspace
             verbose
                 Enable verbose output
+            force
+                Force re-download of models even if they already exist
+            foundationpose_assets
+                Path to cached FoundationPose assets
+            dope_assets
+                Path to cached DOPE assets
+            segment_anything_assets
+                Path to cached Segment Anything assets
+            segment_anything2_assets
+                Path to cached Segment Anything 2 assets
+            ur_dnn_policy_assets
+                Path to cached UR DNN Policy assets
+            sam_model_assets
+                Path to cached SAM model assets
+            sam2_model_assets
+                Path to cached SAM2 model assets
 
         Returns
         -------
@@ -93,6 +121,14 @@ class ModelSetup:
         if not self.models_dir.exists():
             self.logger.info(f'Creating models directory at {self.models_dir}')
             self.models_dir.mkdir(parents=True, exist_ok=True)
+
+        self.foundationpose_assets = foundationpose_assets
+        self.dope_assets = dope_assets
+        self.segment_anything_assets = segment_anything_assets
+        self.segment_anything2_assets = segment_anything2_assets
+        self.ur_dnn_policy_assets = ur_dnn_policy_assets
+        self.sam_model_assets = sam_model_assets
+        self.sam2_model_assets = sam2_model_assets
 
     def download_file(self, url: str, output_path: Path) -> bool:
         """
@@ -165,7 +201,10 @@ class ModelSetup:
             self.logger.error(f'Error executing command: {e}')
             return False
 
-    def process_urls(self, base_dir: Path, urls: List[str], filename: str) -> bool:
+    def process_urls(
+        self, base_dir: Path, urls: List[str], filename: str,
+        cache_path: Optional[Path] = None
+    ) -> bool:
         """
         Download and extract tarballs from URLs.
 
@@ -186,9 +225,14 @@ class ModelSetup:
             # Get the filename from the URL
             download_path = base_dir / filename
 
-            # Download the file
-            if not self.download_file(url, download_path):
-                return False
+            # If a cache directory is provided, use the cached file if it exists
+            if cache_path is not None and os.path.exists(cache_path):
+                self.logger.info(f'Using cached file: {cache_path}')
+                shutil.copy2(cache_path, download_path)
+            else:
+                # Download the file
+                if not self.download_file(url, download_path):
+                    return False
 
             # Extract the tarball
             self.logger.info(f'Extracting {download_path} to {base_dir}...')
@@ -237,7 +281,10 @@ class ModelSetup:
             url = 'https://api.ngc.nvidia.com/v2/resources/org/nvidia/team/isaac/' \
                   'isaac_ros_foundationpose_assets/3.2.0/files?redirect=true' \
                   '&path=quickstart.tar.gz'
-            self.process_urls(self.assets_dir, [url], 'quickstart.tar.gz')
+            self.process_urls(
+                self.assets_dir, [url], 'quickstart.tar.gz',
+                cache_path=self.foundationpose_assets
+            )
         else:
             self.logger.info(f'Mac and Cheese assets already exist at {mac_cheese_dir} - '
                              'Skipping download')
@@ -256,6 +303,15 @@ class ModelSetup:
         """
         self.logger.info('=== Setting up DOPE model ===')
 
+        model_dir = self.models_dir / 'dope'
+        model_dir.mkdir(parents=True, exist_ok=True)
+        pth_path = model_dir / 'soup_60.pth'
+
+        if self.dope_assets is not None and os.path.exists(self.dope_assets):
+            self.logger.info(f'Using cached DOPE model at {self.dope_assets}')
+            shutil.copy2(self.dope_assets, pth_path)
+            return True
+
         try:
             import gdown
         except Exception:
@@ -266,11 +322,7 @@ class ModelSetup:
             importlib.reload(site)
             import gdown
 
-        model_dir = self.models_dir / 'dope'
-        model_dir.mkdir(parents=True, exist_ok=True)
-
         # Download soup_60.pth model using gdown
-        pth_path = model_dir / 'soup_60.pth'
         if not pth_path.exists() or self.force:
             self.logger.info('Downloading soup_60.pth DOPE model...')
             url = 'https://drive.google.com/file/d/1YlbzOpkgIisMLKMlNUAYCgeO9xhAwyrC/' \
@@ -314,11 +366,15 @@ class ModelSetup:
         pth_path = sam_dir / 'vit_b.pth'
 
         if not pth_path.exists() or self.force:
-            self.logger.info(f'Downloading SAM model from {pth_url}...')
-            if not self.download_file(pth_url, pth_path):
-                self.logger.error('Failed to download SAM model')
-                return False
-            self.logger.info(f'SAM model downloaded to {pth_path}')
+            if self.sam_model_assets is not None and os.path.exists(self.sam_model_assets):
+                self.logger.info(f'Using cached SAM model at {self.sam_model_assets}')
+                shutil.copy2(self.sam_model_assets, pth_path)
+            else:
+                self.logger.info(f'Downloading SAM model from {pth_url}...')
+                if not self.download_file(pth_url, pth_path):
+                    self.logger.error('Failed to download SAM model')
+                    return False
+                self.logger.info(f'SAM model downloaded to {pth_path}')
         else:
             self.logger.info(f'SAM model already exists at {pth_path} - Skipping download')
 
@@ -361,7 +417,6 @@ class ModelSetup:
 
         if (not config_dst.exists() and config_src.exists()) or self.force:
             self.logger.info(f'Copying config file from {config_src} to {config_dst}')
-            import shutil
             try:
                 shutil.copy2(config_src, config_dst)
                 self.logger.info('Config file copied successfully')
@@ -396,7 +451,10 @@ class ModelSetup:
             url = 'https://api.ngc.nvidia.com/v2/resources/org/nvidia/team/isaac/' \
                   'isaac_ros_segment_anything_assets/3.1.0/files?redirect=true' \
                   '&path=quickstart.tar.gz'
-            if not self.process_urls(self.assets_dir, [url], 'quickstart.tar.gz'):
+            if not self.process_urls(
+                self.assets_dir, [url], 'quickstart.tar.gz',
+                cache_path=self.segment_anything_assets
+            ):
                 return False
         else:
             self.logger.info(f'Segment Anything assets already exist at {sam_dir} - '
@@ -435,11 +493,15 @@ class ModelSetup:
         pth_path = sam2_dir / 'sam2.1_hiera_tiny.pt'
 
         if not pth_path.exists() or self.force:
-            self.logger.info(f'Downloading SAM2 model from {pth_url}...')
-            if not self.download_file(pth_url, pth_path):
-                self.logger.error('Failed to download SAM2 model')
-                return False
-            self.logger.info(f'SAM2 model downloaded to {pth_path}')
+            if self.sam2_model_assets is not None and os.path.exists(self.sam2_model_assets):
+                self.logger.info(f'Using cached SAM2 model at {self.sam2_model_assets}')
+                shutil.copy2(self.sam2_model_assets, pth_path)
+            else:
+                self.logger.info(f'Downloading SAM2 model from {pth_url}...')
+                if not self.download_file(pth_url, pth_path):
+                    self.logger.error('Failed to download SAM2 model')
+                    return False
+                self.logger.info(f'SAM2 model downloaded to {pth_path}')
         else:
             self.logger.info(f'SAM2 model already exists at {pth_path} - Skipping download')
 
@@ -555,7 +617,10 @@ class ModelSetup:
             url = 'https://api.ngc.nvidia.com/v2/resources/org/nvidia/team/isaac/' \
                   'isaac_ros_segment_anything2_assets/4.0.1/files?redirect=true' \
                   '&path=quickstart.tar.gz'
-            if not self.process_urls(self.assets_dir, [url], 'quickstart.tar.gz'):
+            if not self.process_urls(
+                self.assets_dir, [url], 'quickstart.tar.gz',
+                cache_path=self.segment_anything2_assets
+            ):
                 return False
         else:
             self.logger.info(f'Segment Anything 2 assets already exist at {sam2_dir} - '
@@ -586,7 +651,10 @@ class ModelSetup:
             url = 'https://api.ngc.nvidia.com/v2/resources/org/nvidia/team/' \
                   'isaac/isaac_manipulator_ur_dnn_policy_assets/4.0.0/' \
                   'files?redirect=true&path=quickstart.tar.gz'
-            if not self.process_urls(self.assets_dir, [url], 'quickstart.tar.gz'):
+            if not self.process_urls(
+                self.assets_dir, [url], 'quickstart.tar.gz',
+                cache_path=self.ur_dnn_policy_assets
+            ):
                 return False
         else:
             self.logger.info(f'UR DNN Policy assets already exist at {ur_dnn_policy_dir} - '
@@ -716,6 +784,55 @@ def parse_args():
         help='Force re-download the models'
     )
 
+    parser.add_argument(
+        '--foundationpose-assets',
+        type=str,
+        default=None,
+        help='Path to the FoundationPose assets'
+    )
+
+    parser.add_argument(
+        '--dope-assets',
+        type=str,
+        default=None,
+        help='Path to the DOPE assets'
+    )
+
+    parser.add_argument(
+        '--segment-anything-assets',
+        type=str,
+        default=None,
+        help='Path to the Segment Anything assets'
+    )
+
+    parser.add_argument(
+        '--segment-anything2-assets',
+        type=str,
+        default=None,
+        help='Path to the Segment Anything 2 assets'
+    )
+
+    parser.add_argument(
+        '--ur-dnn-policy-assets',
+        type=str,
+        default=None,
+        help='Path to the UR DNN Policy assets'
+    )
+
+    parser.add_argument(
+        '--sam-model-assets',
+        type=str,
+        default=None,
+        help='Path to the SAM model assets'
+    )
+
+    parser.add_argument(
+        '--sam2-model-assets',
+        type=str,
+        default=None,
+        help='Path to the SAM2 model assets'
+    )
+
     return parser.parse_args()
 
 
@@ -729,7 +846,14 @@ def main() -> int:
     setup = ModelSetup(
         workspace_path=args.workspace,
         verbose=args.verbose,
-        force=args.force
+        force=args.force,
+        foundationpose_assets=args.foundationpose_assets,
+        dope_assets=args.dope_assets,
+        segment_anything_assets=args.segment_anything_assets,
+        segment_anything2_assets=args.segment_anything2_assets,
+        ur_dnn_policy_assets=args.ur_dnn_policy_assets,
+        sam_model_assets=args.sam_model_assets,
+        sam2_model_assets=args.sam2_model_assets,
     )
 
     if os.environ.get('MANIPULATOR_INSTALL_ASSETS') != '1':

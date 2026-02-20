@@ -10,7 +10,7 @@ robot_ip: 192.56.1.2 # not used for sim
 log_level: error
 # Path to Moveit .scene file with static collision objects to preload
 
-moveit_collision_objects_scene_file: '$ISAAC_ROS_WS/src/isaac_manipulator/isaac_manipulator_bringup/config/scene_objects/sim_test_bench/sim_test_scene_objects.scene'
+moveit_collision_objects_scene_file: $(ros2 pkg prefix --share isaac_manipulator_bringup)/config/scene_objects/sim_test_bench/sim_test_scene_objects.scene
 
 # Robot description params
 urdf_path: $(ros2 pkg prefix --share isaac_manipulator_robot_description)/urdf/ur_robotiq_gripper.urdf.xacro
@@ -77,7 +77,7 @@ segment_anything_input_detections_topic: input_detections
 segment_anything_enable_debug_output: 'false'
 sam_model_repository_paths: ['$ISAAC_ROS_WS/isaac_ros_assets/models']
 ess_engine_file_path: $ISAAC_ROS_WS/isaac_ros_assets/models/dnn_stereo_disparity/dnn_stereo_disparity_v4.1.0_onnx_trt10.13/ess.engine
-foundationstereo_engine_file_path: $ISAAC_ROS_WS/isaac_ros_assets/models/foundationstereo/deployable_foundation_stereo_small_v1.0/foundationstereo_320x736.engine
+foundationstereo_engine_file_path: $ISAAC_ROS_WS/isaac_ros_assets/models/foundationstereo/deployable_v2.0/foundationstereo_320x736.engine
 pose_estimation_type: FOUNDATION_POSE
 pose_estimation_input_qos: 'DEFAULT'
 pose_estimation_input_fps: '15'

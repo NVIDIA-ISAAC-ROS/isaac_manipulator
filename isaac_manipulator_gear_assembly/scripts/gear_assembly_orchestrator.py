@@ -1327,15 +1327,27 @@ class IsaacManipulatorGearAssemblyOrchestrator(RCLPYNode):
                                         child_frame='detected_object1')
             else:
                 gear_pose_in_pose_msg = geometry_utils.get_pose_from_transform(self.gear_pose)
-
                 gear_pose_in_pose_msg.position.z += self._offset_for_insertion_pose
-                self.publish_pose_on_tf_static(gear_pose_in_pose_msg,
-                                               parent_frame='base_link',
-                                               child_frame='detected_object1')
-                self.get_logger().info(
-                    f'Published detected object 1 on TF static: {gear_pose_in_pose_msg}')
-                self._get_objects_detected_object_id = 0
+
+                # Publish multiple times with TF to ensure it updates
                 for _ in range(10):
+                    self.publish_pose_on_tf(
+                        gear_pose_in_pose_msg,
+                        parent_frame='base_link',
+                        child_frame='detected_object1')
+                    time.sleep(0.05)
+
+                self._get_objects_detected_object_id = 0
+
+            if self._use_sim_time:
+                # Continuously publish the gear transform before pick to ensure fresh TF
+                gear_pose_for_tf = geometry_utils.get_pose_from_transform(self.gear_pose)
+                gear_pose_for_tf.position.z += self._offset_for_insertion_pose
+                for i in range(20):
+                    self.publish_pose_on_tf(
+                        gear_pose_for_tf,
+                        parent_frame='base_link',
+                        child_frame='detected_object1')
                     time.sleep(0.1)
 
             # Now do PickAndHover action on that object using get objects detected id.
@@ -1410,14 +1422,18 @@ class IsaacManipulatorGearAssemblyOrchestrator(RCLPYNode):
                     return False
 
                 if self._use_sim_time:
-                    # Open gripper.
+                    # Open gripper and verify it completed
                     self._open_gripper()
-                    self._gripper_done_event.wait(timeout=10.0)
+                    gripper_opened = self._gripper_done_event.wait(timeout=10.0)
+                    if not gripper_opened:
+                        self.get_logger().warn(
+                            'Gripper open command timed out - gripper may not be fully open')
 
                     self._take_simulation_robot_to_home_position()
                     self.get_logger().info('Waiting for 5 seconds')
                     time.sleep(5.0)
                     self.get_logger().info('Done waiting')
+
                     # Switching back to cuMotion controller.
                     self._switch_sim_controller_to_rl_policy(is_rl_policy=False)
                     # Reset the gripper done event and result.
@@ -1442,9 +1458,12 @@ class IsaacManipulatorGearAssemblyOrchestrator(RCLPYNode):
             self._clear_objects_result_received = False
 
         self.get_logger().info(f'Failure count: {self.failure_count}')
-        if self.failure_count/self.total_count > 0.3:
+        if self.total_count > 0 and self.failure_count/self.total_count > 0.3:
             self.get_logger().error(f'Pose estimation action failed'
                                     f'{self.failure_count}/{self.total_count} times')
+            return False
+        elif self.total_count == 0 and self.failure_count > 0:
+            self.get_logger().error(f'All operations failed ({self.failure_count} failures)')
             return False
         return True
 
