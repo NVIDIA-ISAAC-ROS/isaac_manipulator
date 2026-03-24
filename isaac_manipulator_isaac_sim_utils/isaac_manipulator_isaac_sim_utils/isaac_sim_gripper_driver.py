@@ -111,22 +111,20 @@ class IsaacSimGripperActionServer(Node):
                 GoalStatus.STATUS_CANCELED
             ):
                 self.get_logger().info('Gripper goal cancelled')
-                goal_handle.canceled()
                 result.reached_goal = False
+                goal_handle.canceled(result)
                 return result
 
             self.publish_joint_state(self.finger_joint_pos)
             # We need to put time.sleep here as rclpy spin cause this node to get blocked.
             time.sleep(0.1)
 
-        goal_handle.succeed()
-
         result.position = desired_position
         result.reached_goal = True
 
         self.action_callback_happening = False
         self.get_logger().info('Gripper goal executed')
-
+        goal_handle.succeed(result)
         return result
 
     def set_gripper_ctrl_target(self, finger_joint_joint_angle: float):
