@@ -1,4 +1,4 @@
-# Isaac Manipulator
+# Isaac ROS Manipulation
 
 This repository contains the integrated Isaac for Manipulation launch files.
 

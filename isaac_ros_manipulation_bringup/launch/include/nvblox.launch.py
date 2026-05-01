@@ -1,0 +1,144 @@
+# SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+import os
+from typing import List, Tuple
+
+import isaac_ros_launch_utils as lu
+import isaac_ros_launch_utils.all_types as lut
+import isaac_ros_manipulation_ros_python_utils.constants as constants
+from isaac_ros_manipulation_ros_python_utils.manipulator_types import CameraType
+
+
+def get_realsense_remappings(
+    num_cameras: int, no_robot_mode: bool, enable_dnn_depth_in_realsense: bool
+                             ) -> List[Tuple[str, str]]:
+    remappings = []
+    for i in range(num_cameras):
+        remapped_image_topic = f'/camera_{i+1}/color/image_raw'
+        remapped_camera_info_topic = f'/camera_{i+1}/color/camera_info'
+        remapped_depth_camera_info_topic = f'/camera_{i+1}/aligned_depth_to_color/camera_info'
+        if enable_dnn_depth_in_realsense:
+            remapped_image_topic = f'/camera_{i+1}/rgb/image_rect_color'
+            remapped_camera_info_topic = f'/camera_{i+1}/rgb/camera_info'
+            remapped_depth_camera_info_topic = f'/camera_{i+1}/rgb/camera_info'
+        remappings.append((f'/camera_{i}/color/image', remapped_image_topic))
+        remappings.append((f'/camera_{i}/color/camera_info', remapped_camera_info_topic))
+        remappings.append((f'/camera_{i}/depth/camera_info', remapped_depth_camera_info_topic))
+        # If we have no robot, nvblox consumes the depth image directly.
+        # Otherwise the depth image published by the robot segmenter is used.
+        if no_robot_mode:
+            remappings.append(
+                (f'/camera_{i}/depth/image', f'/camera_{i+1}/aligned_depth_to_color/image_raw'))
+        else:
+            remappings.append((f'/camera_{i}/depth/image', f'/cumotion/camera_{i+1}/world_depth'))
+    return remappings
+
+
+def get_sim_remappings() -> List[Tuple[str, str]]:
+    remappings = []
+    remappings.append(('/camera_0/color/image', '/front_stereo_camera/left/image_raw'))
+    remappings.append(('/camera_0/color/camera_info', '/front_stereo_camera/left/camera_info'))
+    # We want nvblox to consume the depth map that segments out the robot
+    remappings.append(('/camera_0/depth/image', '/cumotion/camera_1/world_depth'))
+    remappings.append(('/camera_0/depth/camera_info', '/front_stereo_camera/left/camera_info'))
+    return remappings
+
+
+def add_nvblox(args: lu.ArgumentContainer) -> List[lut.Action]:
+    camera_type = CameraType[args.camera_type]
+    num_cameras = int(args.num_cameras)
+    no_robot_mode = lu.is_true(args.no_robot_mode)
+    workspace_bounds_name = str(args.workspace_bounds_name)
+    enable_dnn_depth_in_realsense = lu.is_true(args.enable_dnn_depth_in_realsense)
+    nvblox_global_frame = str(args.nvblox_global_frame)
+    actions = []
+
+    # Check if the configuration is valid
+    if camera_type is CameraType.REALSENSE:
+        assert num_cameras <= 2, 'Running more than 2 RealSense cameras not allowed.'
+    elif camera_type is CameraType.ISAAC_SIM:
+        assert num_cameras == 1, 'Running multiple cameras in Isaac Sim not allowed.'
+
+    # Get config files
+    base_config = lu.get_path('nvblox_examples_bringup', 'config/nvblox/nvblox_base.yaml')
+    manipulator_base_config = lu.get_path('isaac_ros_manipulation_bringup',
+                                          'config/nvblox/nvblox_manipulator_base.yaml')
+    realsense_config = lu.get_path(
+        'isaac_ros_manipulation_bringup',
+        'config/nvblox/specializations/nvblox_manipulator_realsense.yaml')
+    isaac_sim_config = lu.get_path('isaac_ros_manipulation_bringup',
+                                   'config/nvblox/specializations/nvblox_manipulator_sim.yaml')
+    workspace_config = lu.get_path('isaac_ros_manipulation_bringup',
+                                   f'config/nvblox/workspace_bounds/{workspace_bounds_name}.yaml')
+
+    # Get remappings and specialized parameters
+    if camera_type is CameraType.REALSENSE:
+        remappings = get_realsense_remappings(
+            num_cameras, no_robot_mode, enable_dnn_depth_in_realsense
+        )
+        camera_config = realsense_config
+    elif camera_type is CameraType.ISAAC_SIM:
+        remappings = get_sim_remappings()
+        camera_config = isaac_sim_config
+    else:
+        raise Exception(f'CameraType {camera_type} not implemented.')
+
+    # Load the workspace config
+    if not os.path.exists(workspace_config):
+        raise Exception(f'Workspace with name {workspace_bounds_name} does not exist. '
+                        'Launching nvblox without valid workspace is not allowed.')
+
+    # Get all parameters with overrides.
+    parameters = []
+    parameters.append(base_config)
+    parameters.append(manipulator_base_config)
+    parameters.append(camera_config)
+    parameters.append(workspace_config)
+    parameters.append({'num_cameras': num_cameras})
+    parameters.append({'global_frame': nvblox_global_frame})
+
+    nvblox_node = lut.ComposableNode(
+        name='nvblox_node',
+        package='nvblox_ros',
+        plugin='nvblox::NvbloxNode',
+        remappings=remappings,
+        parameters=parameters)
+
+    actions.append(lu.load_composable_nodes(args.container_name, [nvblox_node]))
+    actions.append(
+        lu.log_info([
+            "Enabling nvblox for '",
+            str(num_cameras), "' '",
+            str(camera_type), "' cameras configured for the '", workspace_bounds_name,
+            "' workspace."
+        ]))
+    return actions
+
+
+def generate_launch_description() -> lut.LaunchDescription:
+    args = lu.ArgumentContainer()
+    args.add_arg('camera_type')
+    args.add_arg('no_robot_mode', False)
+    args.add_arg('enable_dnn_depth_in_realsense', False)
+    args.add_arg('num_cameras', 1)
+    args.add_arg('workspace_bounds_name', '')
+    args.add_arg('container_name', constants.MANIPULATOR_CONTAINER_NAME)
+    args.add_arg('nvblox_global_frame', 'base_link')
+
+    args.add_opaque_function(add_nvblox)
+    return lut.LaunchDescription(args.get_launch_actions())
