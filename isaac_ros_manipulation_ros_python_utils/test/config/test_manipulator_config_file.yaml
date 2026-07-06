@@ -14,7 +14,7 @@ moveit_collision_objects_scene_file: '$ISAAC_ROS_WS/src/isaac_ros_manipulation/i
 
 # Robot description params
 urdf_path: urdf/ur_robotiq_gripper.urdf.xacro
-# Relative path to the isaac_ros_manipulation_robot_description package, note this is important
+# Relative path to the isaac_ros_manipulation_ur_robot_description package, note this is important
 srdf_path: srdf/ur_robotiq_2f_85_gripper.srdf.xacro
 joint_limits_file_path: config/joint_limits.yaml
 kinematics_file_path: config/kinematics.yaml
@@ -67,7 +67,7 @@ foundation_pose_refine_engine_file_path: $ISAAC_ROS_WS/isaac_ros_assets/models/f
 foundation_pose_texture_path: $ISAAC_ROS_WS/isaac_ros_assets/isaac_ros_foundationpose/Mac_and_cheese_0_1/materials/textures/baked_mesh_tex0.png
 foundation_pose_score_engine_file_path: $ISAAC_ROS_WS/isaac_ros_assets/models/foundationpose/score_trt_engine.plan
 
-gear_assembly_model_path: $ISAAC_ROS_WS/isaac_ros_assets/isaac_ros_manipulation_ur_dnn_policy/
+gear_assembly_model_path: $ISAAC_ROS_WS/isaac_ros_assets/isaac_ros_manipulation_dnn_policy/
 gear_assembly_model_file_name: model_gripper_85.pt
 gear_assembly_policy_alpha: 0.0
 gear_assembly_observation_topic: /gear_assembly/observation
@@ -80,16 +80,18 @@ gear_assembly_gear_insertion_status_topic: /gear_assembly/gear_insertion_status
 gear_assembly_ros_bag_folder_path: $ISAAC_ROS_WS/rl_inference_policy
 gear_assembly_enable_recording: 'true'
 gear_assembly_use_joint_state_planner: 'true'
-gear_assembly_peg_stand_mesh_file_path: $ISAAC_ROS_WS/isaac_ros_assets/isaac_ros_manipulation_ur_dnn_policy/gear_base/gear_base.obj
-gear_assembly_gear_large_mesh_file_path: $ISAAC_ROS_WS/isaac_ros_assets/isaac_ros_manipulation_ur_dnn_policy/gear_large/gear_large.obj
-gear_assembly_gear_small_mesh_file_path: $ISAAC_ROS_WS/isaac_ros_assets/isaac_ros_manipulation_ur_dnn_policy/gear_small/gear_small.obj
-gear_assembly_gear_medium_mesh_file_path: $ISAAC_ROS_WS/isaac_ros_assets/isaac_ros_manipulation_ur_dnn_policy/gear_medium/gear_medium.obj
+gear_assembly_peg_stand_mesh_file_path: $ISAAC_ROS_WS/isaac_ros_assets/isaac_ros_manipulation_dnn_policy/gear_base/gear_base.obj
+gear_assembly_gear_large_mesh_file_path: $ISAAC_ROS_WS/isaac_ros_assets/isaac_ros_manipulation_dnn_policy/gear_large/gear_large.obj
+gear_assembly_gear_small_mesh_file_path: $ISAAC_ROS_WS/isaac_ros_assets/isaac_ros_manipulation_dnn_policy/gear_small/gear_small.obj
+gear_assembly_gear_medium_mesh_file_path: $ISAAC_ROS_WS/isaac_ros_assets/isaac_ros_manipulation_dnn_policy/gear_medium/gear_medium.obj
 gear_assembly_use_ground_truth_pose_in_sim: 'false'
 gear_assembly_verify_pose_estimation_accuracy: 'false'
 gear_assembly_run_rl_inference: 'true'
 gear_assembly_output_dir: '$ISAAC_ROS_WS/gear_assembly_outputs'
 gear_assembly_offset_for_place_pose: 0.30
 gear_assembly_offset_for_insertion_pose: 0.0
+gear_assembly_place_pose_z_rotation_deg: 0.0
+gear_assembly_post_insertion_gripper_rotation_deg: 0.0
 gear_assembly_timeout_for_insertion_action_call: 7.0  # in seconds
 gear_assembly_model_frequency: 30.0  # in Hz
 
@@ -107,7 +109,7 @@ time_dilation_factor: '0.2' # This parameter is used to control the speed of the
 
 segment_anything_input_points_topic: input_points
 segment_anything_input_detections_topic: input_detections
-sam_model_repository_paths: ['$ISAAC_ROS_WS/isaac_ros_assets/models']
+sam_model_repository_paths: ['$ISAAC_ROS_WS/isaac_ros_assets/models/triton']
 segment_anything_enable_debug_output: 'false'
 
 # For pick and place automated testing
@@ -118,7 +120,7 @@ home_pose: [0.0, 0.4, 0.7, 0.69705, 0.71628, 0.030307, 0.012237]
 object_attachment_type: CUSTOM_MESH
 object_attachment_scale: [0.09, 0.185, 0.035]
 attach_object_mesh_file_path: $ISAAC_ROS_WS/isaac_ros_assets/isaac_ros_foundationpose/soup_can/soup_can.obj
-end_effector_mesh_resource_uri: package://isaac_ros_manipulation_robot_description/meshes/robotiq_2f_85.obj
+end_effector_mesh_resource_uri: package://isaac_ros_manipulation_ur_robot_description/meshes/robotiq_2f_85.obj
 
 # Visualization
 enable_rviz_visualization: 'true'

@@ -44,7 +44,7 @@ package_name = 'isaac_ros_manipulation_ros_python_utils'
 
 setup(
     name=package_name,
-    version='0.0.0',
+    version='4.5.0',
     packages=[package_name],
     data_files=[
         ('share/ament_index/resource_index/packages',

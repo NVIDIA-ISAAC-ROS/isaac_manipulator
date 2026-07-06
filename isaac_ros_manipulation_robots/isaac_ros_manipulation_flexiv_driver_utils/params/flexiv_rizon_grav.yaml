@@ -1,0 +1,11 @@
+# Default parameters for Flexiv Rizon with Grav gripper
+robot_type: FLEXIV
+rizon_type: Rizon4s
+gripper_type: grav
+
+urdf_path: $(ros2 pkg prefix --share isaac_ros_manipulation_flexiv_robot_description)/urdf/rizon_grav.urdf.xacro
+srdf_path: $(ros2 pkg prefix --share isaac_ros_manipulation_flexiv_robot_description)/srdf/rizon_grav.srdf.xacro
+joint_limits_file_path: $(ros2 pkg prefix --share isaac_ros_manipulation_flexiv_robot_description)/config/joint_limits.yaml
+kinematics_file_path: $(ros2 pkg prefix --share isaac_ros_manipulation_flexiv_robot_description)/config/kinematics_sim.yaml
+moveit_controllers_file_path: $(ros2 pkg prefix --share isaac_ros_manipulation_flexiv_robot_description)/config/moveit_sim_controllers.yaml
+ros2_controllers_file_path: $(ros2 pkg prefix --share isaac_ros_manipulation_flexiv_robot_description)/config/ros2_control_controllers_sim.yaml

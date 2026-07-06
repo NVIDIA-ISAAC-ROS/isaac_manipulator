@@ -86,6 +86,21 @@ def add_realsense_drivers(args: lu.ArgumentContainer) -> List[Action]:
     }
     for i in range(num_cameras):
         camera_name = f'camera_{i+1}'
+        realsense_overrides = {
+            'camera_name': camera_name,
+            'serial_no': camera_ids_dict[camera_name]['serial_no'],
+            # Disable IR emitter when using DNN depth (ESS/FoundationStereo)
+            # because the projected IR dot pattern appears in the images and
+            # degrades the neural network's depth estimation.
+            'depth_module.emitter_enabled': 0 if args.enable_dnn_depth_in_realsense else 1,
+        }
+        if args.enable_dnn_depth_in_realsense:
+            # Keep RealSense on the known-good stream tuple used by ESS:
+            # RGB at 1280x720 plus IR stereo at 848x480.
+            realsense_overrides.update({
+                'depth_module.depth_profile': '848x480x30',
+                'depth_module.infra_profile': '848x480x30',
+            })
         driver_nodes.append(
             ComposableNode(
                 namespace='',
@@ -93,15 +108,7 @@ def add_realsense_drivers(args: lu.ArgumentContainer) -> List[Action]:
                 package='realsense2_camera',
                 plugin='realsense2_camera::RealSenseNodeFactory',
                 parameters=[
-                    realsense_config, {
-                        'camera_name': camera_name,
-                        'serial_no': camera_ids_dict[camera_name]['serial_no'],
-                        # Disable IR emitter when using DNN depth (ESS/FoundationStereo)
-                        # because the projected IR dot pattern appears in the images and
-                        # degrades the neural network's depth estimation.
-                        'depth_module.emitter_enabled':
-                            0 if args.enable_dnn_depth_in_realsense else 1,
-                    }
+                    realsense_config, realsense_overrides
                 ]))
 
         if args.enable_dnn_depth_in_realsense:

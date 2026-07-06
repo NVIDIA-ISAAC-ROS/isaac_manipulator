@@ -107,22 +107,32 @@ class CloseGripper(BaseActionBehavior):
         """
         Process the gripper close action result.
 
+        A close command is considered successful when the action server
+        reports either ``reached_goal`` (commanded position reached) or
+        ``stalled`` (gripper stopped while applying force, i.e. holding an
+        object). Comparing the raw ``position`` field against
+        ``close_position`` is not reliable: when closing onto an object the
+        gripper legitimately stops short of the commanded width.
+
         Returns
         -------
         py_trees.common.Status
-            SUCCESS if the gripper was closed successfully,
-            FAILURE otherwise
+            SUCCESS if the gripper close completed (either reached the
+            commanded position or stalled on an object), FAILURE otherwise.
 
         """
-        # Check if we reached the goal position
-        current_position = getattr(self.get_action_result(), 'position', None)
+        result = self.get_action_result()
+        reached_goal = getattr(result, 'reached_goal', None)
+        stalled = getattr(result, 'stalled', None)
+        position = getattr(result, 'position', None)
 
-        if current_position is not None and \
-                current_position <= self.close_position:
+        if reached_goal or stalled:
             self.node.get_logger().info(
-                f'[{self.name}] Successfully closed gripper to position: {current_position}')
+                f'[{self.name}] Successfully closed gripper '
+                f'(reached_goal={reached_goal}, stalled={stalled}, position={position})')
             return py_trees.common.Status.SUCCESS
-        else:
-            self.node.get_logger().error(
-                f'[{self.name}] Failed to close gripper to desired position')
-            return py_trees.common.Status.FAILURE
+
+        self.node.get_logger().error(
+            f'[{self.name}] Failed to close gripper to desired position '
+            f'(reached_goal={reached_goal}, stalled={stalled}, position={position})')
+        return py_trees.common.Status.FAILURE

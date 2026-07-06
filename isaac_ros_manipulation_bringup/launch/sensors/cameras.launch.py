@@ -43,7 +43,9 @@ def launch_setup(context, *args, **kwargs):
                                                          use_sim_time=sensor_config.use_sim_time,
                                                          setup=sensor_config.setup,
                                                          num_cameras=sensor_config.num_cameras,
-                                                         camera_type=sensor_config.camera_type)
+                                                         camera_type=sensor_config.camera_type,
+                                                         gripper_type=sensor_config.gripper_type,
+                                                         robot_type=str(sensor_config.robot_type))
     return manipulator_init_nodes
 
 

@@ -1,0 +1,86 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://wiki.ros.org/xacro" name="rizon_grav">
+    <xacro:arg name="rizon_type" default="Rizon4s" />
+    <xacro:arg name="robot_sn" default="" />
+    <xacro:arg name="arm_prefix" default="" />
+    <xacro:arg name="sim_isaac" default="false" />
+    <xacro:arg name="initial_positions_file"
+        default="$(find isaac_ros_manipulation_flexiv_robot_description)/config/initial_positions.yaml"/>
+    <xacro:arg name="joint_limits_parameters_file"
+        default="$(find flexiv_description)/config/$(arg rizon_type)/joint_limits.yaml"/>
+    <xacro:arg name="kinematics_parameters_file"
+        default="$(find flexiv_description)/config/$(arg rizon_type)/default_kinematics.yaml"/>
+    <xacro:arg name="inertia_parameters_file"
+        default="$(find flexiv_description)/config/$(arg rizon_type)/inertia_parameters.yaml"/>
+    <xacro:arg name="visual_parameters_file"
+        default="$(find flexiv_description)/config/$(arg rizon_type)/visual_parameters.yaml"/>
+
+    <xacro:property name="initial_positions_file" default="$(arg initial_positions_file)"/>
+
+    <!-- Include Flexiv arm + Grav gripper (ros2_control disabled, we provide our own for sim) -->
+    <xacro:include filename="$(find flexiv_description)/urdf/common/rizon_robot.xacro" />
+
+    <!-- Instantiate Flexiv arm with Grav gripper -->
+    <xacro:rizon_robot
+        rizon_type="$(arg rizon_type)"
+        robot_sn="$(arg robot_sn)"
+        joint_limits_parameters_file="$(arg joint_limits_parameters_file)"
+        kinematics_parameters_file="$(arg kinematics_parameters_file)"
+        inertia_parameters_file="$(arg inertia_parameters_file)"
+        visual_parameters_file="$(arg visual_parameters_file)"
+        arm_prefix="$(arg arm_prefix)"
+        load_gripper="true"
+        gripper_name="Flexiv-GN01"
+        load_mounted_ft_sensor="false"
+        ros2_control="false"
+        use_fake_hardware="false"
+        fake_sensor_commands="false"
+        initial_positions_file="$(arg initial_positions_file)" />
+
+    <!-- Gripper/grasp reference frames -->
+    <link name="gripper_frame">
+        <inertial>
+            <mass value="0.01"/>
+            <inertia ixx="0.0001" ixy="0.0" ixz="0.0" iyy="0.0001" iyz="0.0" izz="0.0001"/>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
+        </inertial>
+    </link>
+    <joint name="gripper_joint" type="fixed">
+        <origin rpy="0 0 0" xyz="0 0 0"/>
+        <parent link="flange"/>
+        <child link="gripper_frame"/>
+    </joint>
+
+    <link name="grasp_frame">
+        <inertial>
+            <mass value="0.01"/>
+            <inertia ixx="0.0001" ixy="0.0" ixz="0.0" iyy="0.0001" iyz="0.0" izz="0.0001"/>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
+        </inertial>
+    </link>
+    <joint name="grasp_joint" type="fixed">
+        <origin rpy="0 0 0" xyz="0 0 0.15"/>
+        <parent link="gripper_frame"/>
+        <child link="grasp_frame"/>
+    </joint>
+
+    <link name="insertion_frame">
+        <inertial>
+            <mass value="0.01"/>
+            <inertia ixx="0.0001" ixy="0.0" ixz="0.0" iyy="0.0001" iyz="0.0" izz="0.0001"/>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
+        </inertial>
+    </link>
+    <joint name="insertion_joint" type="fixed">
+        <origin rpy="0 3.14 0" xyz="0 0 0.26"/>
+        <parent link="gripper_frame"/>
+        <child link="insertion_frame"/>
+    </joint>
+
+    <!-- TopicBasedSystem ros2_control for Isaac Sim -->
+    <xacro:if value="$(arg sim_isaac)">
+        <xacro:include filename="$(find isaac_ros_manipulation_flexiv_robot_description)/urdf/rizon_sim.ros2_control.xacro" />
+        <xacro:rizon_ros2_control name="rizon_ros2_control_sim"
+            initial_positions="${xacro.load_yaml(initial_positions_file)}"/>
+    </xacro:if>
+</robot>

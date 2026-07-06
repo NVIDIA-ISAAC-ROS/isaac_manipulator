@@ -151,6 +151,7 @@ def generate_launch_description():
             'image_input_topic': '/dope_encoder/image_dropped',
             'camera_info_input_topic': '/dope_encoder/camera_info_dropped',
             'tensor_output_topic': '/tensor_pub',
+            'tensor_name': 'input_tensor',
             'keep_aspect_ratio': 'False'
         }.items(),
     )

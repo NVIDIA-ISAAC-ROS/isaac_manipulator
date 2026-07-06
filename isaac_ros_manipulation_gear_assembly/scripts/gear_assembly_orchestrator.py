@@ -18,6 +18,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Orchestration node for Gear Assembly in Isaac Manipulator."""
 
+import math
 import os
 from threading import Event
 import time
@@ -46,6 +47,7 @@ from rclpy.wait_for_message import wait_for_message
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Bool, Float64, Header
 import tf2_ros
+from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 
 
 ISAAC_ROS_WS = os.environ.get('ISAAC_ROS_WS')
@@ -66,6 +68,7 @@ class IsaacRosManipulationGearAssemblyOrchestrator(RCLPYNode):
     DEFAULT_NAMESPACE = ''
     _max_timeout_time_for_action_call: float = 10.0
     _num_cycles: int = 10
+    _peg_pose_base_frame: str = 'base'
     _use_sim_time: bool = False
     _mesh_file_paths: List[str] = []
     _run_test: bool = False
@@ -114,6 +117,18 @@ class IsaacRosManipulationGearAssemblyOrchestrator(RCLPYNode):
         self.declare_parameter('nodes', [])
         self.declare_parameter('offset_for_place_pose', 0.28)
         self.declare_parameter('offset_for_insertion_pose', 0.0)
+        self.declare_parameter('base_frame', 'base_link')
+        self.declare_parameter('gripper_action_name', '/robotiq_gripper_controller/gripper_cmd')
+        self.declare_parameter('gripper_open_position', 0.0)
+        self.declare_parameter('gripper_close_position', 0.65)
+        self.declare_parameter('place_pose_z_rotation_deg', 0.0)
+        self.declare_parameter('post_insertion_gripper_rotation_deg', 0.0)
+        self.declare_parameter('enable_controller_switching', True)
+        self.declare_parameter('joint_names', [
+            'shoulder_pan_joint', 'shoulder_lift_joint', 'elbow_joint',
+            'wrist_1_joint', 'wrist_2_joint', 'wrist_3_joint', 'finger_joint',
+        ])
+        self.declare_parameter('peg_pose_base_frame', 'base')
 
         # Then have ONLY ONE assignment per parameter:
         self._point_topic_name_as_trigger = self.get_parameter(
@@ -152,13 +167,36 @@ class IsaacRosManipulationGearAssemblyOrchestrator(RCLPYNode):
             'offset_for_place_pose').get_parameter_value().double_value
         self._offset_for_insertion_pose = self.get_parameter(
             'offset_for_insertion_pose').get_parameter_value().double_value
+        self._base_frame = self.get_parameter(
+            'base_frame').get_parameter_value().string_value
+        self._gripper_action_name = self.get_parameter(
+            'gripper_action_name').get_parameter_value().string_value
+        self._gripper_open_position = self.get_parameter(
+            'gripper_open_position').get_parameter_value().double_value
+        self._gripper_close_position = self.get_parameter(
+            'gripper_close_position').get_parameter_value().double_value
+        self._place_pose_z_rotation_deg = self.get_parameter(
+            'place_pose_z_rotation_deg').get_parameter_value().double_value
+        self._post_insertion_gripper_rotation_deg = self.get_parameter(
+            'post_insertion_gripper_rotation_deg').get_parameter_value().double_value
+        self._enable_controller_switching = self.get_parameter(
+            'enable_controller_switching').get_parameter_value().bool_value
+        self._joint_names = list(self.get_parameter(
+            'joint_names').get_parameter_value().string_array_value)
+        self._peg_pose_base_frame = self.get_parameter(
+            'peg_pose_base_frame').get_parameter_value().string_value
+
+        if len(self._target_joint_state_for_place_pose_arr_value) != \
+                len(self._joint_names):
+            raise ValueError(
+                f'target_joint_state_for_place_pose has '
+                f'{len(self._target_joint_state_for_place_pose_arr_value)} '
+                f'values but robot has {len(self._joint_names)} joints.')
+
         self._target_joint_state_for_place_pose = JointState()
         self._target_joint_state_for_place_pose.position = \
             self._target_joint_state_for_place_pose_arr_value
-        self._target_joint_state_for_place_pose.name = [
-            'shoulder_pan_joint', 'shoulder_lift_joint', 'elbow_joint',
-            'wrist_1_joint', 'wrist_2_joint', 'wrist_3_joint', 'finger_joint'
-        ]
+        self._target_joint_state_for_place_pose.name = list(self._joint_names)
         self._target_joint_state_for_place_pose.velocity = \
             [0.0] * len(self._target_joint_state_for_place_pose.position)
         self._target_joint_state_for_place_pose.effort = \
@@ -226,7 +264,7 @@ class IsaacRosManipulationGearAssemblyOrchestrator(RCLPYNode):
             JointState, '/isaac_joint_commands', 10)
 
         self._gripper_client = ActionClient(
-            self, GripperCommand, '/robotiq_gripper_controller/gripper_cmd')
+            self, GripperCommand, self._gripper_action_name)
         self._gripper_done_event = Event()
         self._gripper_done_result = False
 
@@ -331,19 +369,7 @@ class IsaacRosManipulationGearAssemblyOrchestrator(RCLPYNode):
             self.destroy_client(client)
 
     def switch_to_impedance_control(self, timeout_sec: float = 10.0) -> bool:
-        """
-        Switch from joint trajectory control to impedance control.
-
-        Args
-        ----
-            node: ROS2 node to use for service calls
-            timeout_sec: Timeout for service call in seconds
-
-        Returns
-        -------
-            bool: True if switch was successful, False otherwise
-
-        """
+        """Switch from joint trajectory control to impedance control (UR)."""
         return self._set_controller_states(
             controllers_to_activate=['impedance_controller'],
             controllers_to_deactivate=['scaled_joint_trajectory_controller'],
@@ -351,24 +377,79 @@ class IsaacRosManipulationGearAssemblyOrchestrator(RCLPYNode):
         )
 
     def switch_to_trajectory_control(self, timeout_sec: float = 10.0) -> bool:
-        """
-        Switch from impedance control to joint trajectory control.
-
-        Args
-        ----
-            node: ROS2 node to use for service calls
-            timeout_sec: Timeout for service call in seconds
-
-        Returns
-        -------
-            bool: True if switch was successful, False otherwise
-
-        """
+        """Switch from impedance control to joint trajectory control (UR)."""
         return self._set_controller_states(
             controllers_to_activate=['scaled_joint_trajectory_controller'],
             controllers_to_deactivate=['impedance_controller'],
             timeout_sec=timeout_sec
         )
+
+    def switch_to_streaming_control(self, timeout_sec: float = 10.0) -> bool:
+        """Switch from rizon_arm_controller to streaming_position_controller (Flexiv)."""
+        return self._set_controller_states(
+            controllers_to_activate=['streaming_position_controller'],
+            controllers_to_deactivate=['rizon_arm_controller'],
+            timeout_sec=timeout_sec
+        )
+
+    def switch_to_rizon_arm_control(self, timeout_sec: float = 10.0) -> bool:
+        """Switch from streaming_position_controller to rizon_arm_controller (Flexiv)."""
+        return self._set_controller_states(
+            controllers_to_activate=['rizon_arm_controller'],
+            controllers_to_deactivate=['streaming_position_controller'],
+            timeout_sec=timeout_sec
+        )
+
+    def _rotate_last_joint(
+        self,
+        rotation_deg: float,
+        controller_name: str = 'rizon_arm_controller',
+        joint_states_topic: str = '/joint_states',
+        duration_sec: float = 3.0,
+    ) -> bool:
+        """Rotate the last arm joint by the given degrees via a direct trajectory command."""
+        success, current_state = wait_for_message(
+            JointState, self, joint_states_topic, time_to_wait=2.0)
+        if not success or current_state is None:
+            self.get_logger().error(
+                f'Failed to read joint state from {joint_states_topic}')
+            return False
+
+        arm_joint_names = list(self._joint_names)
+        arm_positions = []
+        for name in arm_joint_names:
+            if name in current_state.name:
+                idx = list(current_state.name).index(name)
+                arm_positions.append(current_state.position[idx])
+            else:
+                self.get_logger().error(
+                    f'Joint {name} not found in {joint_states_topic}')
+                return False
+
+        arm_positions[-1] += math.radians(rotation_deg)
+
+        self.get_logger().info(
+            f'Rotating last joint ({arm_joint_names[-1]}) by {rotation_deg} deg')
+
+        traj = JointTrajectory()
+        traj.header.stamp = self.get_clock().now().to_msg()
+        traj.joint_names = arm_joint_names
+        pt = JointTrajectoryPoint()
+        pt.positions = arm_positions
+        pt.time_from_start.sec = int(duration_sec)
+        pt.time_from_start.nanosec = int(
+            (duration_sec - int(duration_sec)) * 1e9)
+        traj.points = [pt]
+
+        topic = f'/{controller_name}/joint_trajectory'
+        pub = self.create_publisher(JointTrajectory, topic, 10)
+        time.sleep(0.1)
+        pub.publish(traj)
+        self.get_logger().info(
+            f'Published trajectory to {topic}, waiting {duration_sec}s')
+        time.sleep(duration_sec + 0.5)
+        self.destroy_publisher(pub)
+        return True
 
     def _get_transform_from_tf(self, child_frame: str, parent_frame: str) -> TransformStamped:
         """Get the transform of a child frame relative to a parent frame."""
@@ -845,14 +926,12 @@ class IsaacRosManipulationGearAssemblyOrchestrator(RCLPYNode):
             self.peg_pose = self.latest_pose_gotten
 
             self.received_messages[self._point_topic_name_as_trigger] = []
-            self.get_logger().info(f'Peg pose: {self.peg_pose}')
+            self.get_logger().info(f'Peg pose (camera frame): {self.peg_pose}')
 
-            # Now publish this on TF Static with parent farme being
-            # camera_frame and child frame being gear_assembly_est_frame.
-            self.get_logger().info('Publishing peg pose on TF Static')
-            self.publish_pose_on_tf_static(self.peg_pose,
-                                           parent_frame=self._camera_prim_name_in_tf,
-                                           child_frame='gear_assembly_frame')
+            self.publish_pose_on_tf_static(
+                self.peg_pose,
+                parent_frame=self._camera_prim_name_in_tf,
+                child_frame='gear_assembly_frame')
 
         self.received_messages[self._point_topic_name_as_trigger] = []
         self.get_logger().error('Waiting for point topic for gear insertion...')
@@ -994,7 +1073,7 @@ class IsaacRosManipulationGearAssemblyOrchestrator(RCLPYNode):
         goal.goal_pose = PoseStamped()
         goal.goal_pose.pose = peg_pose
         goal.goal_pose.header.stamp = self.get_clock().now().to_msg()
-        goal.goal_pose.header.frame_id = 'base_link'  # This is base or base link.
+        goal.goal_pose.header.frame_id = self._base_frame
         goal_future = insertion_client.send_goal_async(goal)
 
         while not goal_future.done():
@@ -1120,7 +1199,7 @@ class IsaacRosManipulationGearAssemblyOrchestrator(RCLPYNode):
 
     def _open_gripper(self):
         """Open the gripper."""
-        self.trigger_gripper(position=0.0, max_effort=10.0)
+        self.trigger_gripper(position=self._gripper_open_position, max_effort=10.0)
 
     def create_logging_subscribers(
         self,
@@ -1240,9 +1319,7 @@ class IsaacRosManipulationGearAssemblyOrchestrator(RCLPYNode):
                 self.update_gripper_close_pos(close_gripper_pos)
                 close_gripper_pos = self._gripper_close_pos[idx]
             else:
-                # For real robot this doesnt matter, the gripper doesn't matter, it doesnt cause
-                # the gear to fly out of the grasp.
-                close_gripper_pos = 0.65
+                close_gripper_pos = self._gripper_close_position
 
             if not self._use_ground_truth_pose_estimation:
                 self.do_perception_for_pose_estimation(mesh_file_path_for_gear)
@@ -1255,7 +1332,7 @@ class IsaacRosManipulationGearAssemblyOrchestrator(RCLPYNode):
                 # out of the FP node and thats the one the server gives you.
                 self.ground_truth_pose_estimation_held_asset = self._get_transform_from_tf(
                     gear_ground_truth_sim_names[idx],
-                    'base_link')
+                    self._base_frame)
                 if self.ground_truth_pose_estimation_held_asset is None:
                     self.get_logger().error('Failed to get ground truth pose estimation')
                     return False
@@ -1284,7 +1361,7 @@ class IsaacRosManipulationGearAssemblyOrchestrator(RCLPYNode):
                     f'Translation delta: {translation_ros_delta_mrad} mrad')
 
                 self.ground_truth_pose_estimation_w_r_t_base = self._get_transform_from_tf(
-                    gear_ground_truth_sim_names[idx], 'base_link')
+                    gear_ground_truth_sim_names[idx], self._base_frame)
                 if self.ground_truth_pose_estimation_w_r_t_base is None:
                     self.get_logger().error('Failed to get ground truth pose estimation')
                     return False
@@ -1294,7 +1371,7 @@ class IsaacRosManipulationGearAssemblyOrchestrator(RCLPYNode):
 
                 self.get_logger().info(f'T_base translation in meters: {T_base[:3, 3]}')
 
-            if not self._use_sim_time:
+            if not self._use_sim_time and self._enable_controller_switching:
                 self.switch_to_trajectory_control()
 
             if not self._use_ground_truth_pose_estimation:
@@ -1305,25 +1382,24 @@ class IsaacRosManipulationGearAssemblyOrchestrator(RCLPYNode):
                 time.sleep(0.1)
 
             place_pose_transform = self._get_transform_from_tf(
-                gear_type, 'base_link')  # TODO change back to gear assembly
+                gear_type, self._base_frame)
             if place_pose_transform is None:
                 self.get_logger().error('Failed to get place pose transform')
                 return False
 
             place_pose = geometry_utils.get_pose_from_transform(place_pose_transform)
 
-            # Rotate place pose by 180 degrees along x to make X face down,
             rotated_place_pose = geometry_utils.rotate_pose(place_pose, 180, 'x')
-            if self._use_sim_time:
-                # Rotate 180 degrees around z to set the desired wrist orientation above the peg.
-                rotated_place_pose = geometry_utils.rotate_pose(rotated_place_pose, 180, 'z')
+            if self._place_pose_z_rotation_deg != 0.0:
+                rotated_place_pose = geometry_utils.rotate_pose(
+                    rotated_place_pose, self._place_pose_z_rotation_deg, 'z')
             rotated_place_pose.position.z += self._offset_for_place_pose
 
             self.get_logger().info(f'Doing gear pickup and place with'
                                    f' offset: {self._offset_for_place_pose}')
 
             self.publish_pose_on_tf(rotated_place_pose,
-                                    parent_frame='base_link',
+                                    parent_frame=self._base_frame,
                                     child_frame='place_pose_static_frame')
 
             # Also publish detectedobject 1 on TF static
@@ -1339,7 +1415,7 @@ class IsaacRosManipulationGearAssemblyOrchestrator(RCLPYNode):
                 for _ in range(10):
                     self.publish_pose_on_tf(
                         gear_pose_in_pose_msg,
-                        parent_frame='base_link',
+                        parent_frame=self._base_frame,
                         child_frame='detected_object1')
                     time.sleep(0.05)
 
@@ -1352,7 +1428,7 @@ class IsaacRosManipulationGearAssemblyOrchestrator(RCLPYNode):
                 for i in range(20):
                     self.publish_pose_on_tf(
                         gear_pose_for_tf,
-                        parent_frame='base_link',
+                        parent_frame=self._base_frame,
                         child_frame='detected_object1')
                     time.sleep(0.1)
 
@@ -1373,23 +1449,33 @@ class IsaacRosManipulationGearAssemblyOrchestrator(RCLPYNode):
             for _ in range(10):
                 time.sleep(0.1)
 
-            # Use base here because policy sees base.
+            # UR policy uses base here but Flexiv uses base_link.
             peg_pose_transform = self._get_transform_from_tf(
-                gear_type, 'base')
+                gear_type, self._peg_pose_base_frame)
             if peg_pose_transform is None:
                 self.get_logger().error('Failed to get peg pose transform')
                 return False
             peg_pose = geometry_utils.get_pose_from_transform(peg_pose_transform)
 
             self.publish_pose_on_tf_static(peg_pose,
-                                           parent_frame='base',
+                                           parent_frame=self._peg_pose_base_frame,
                                            child_frame='rl_insertion_pose_frame')
             self.get_logger().info(f'Peg pose: {peg_pose}')
 
             if self._run_rl_inference:
-                if not self._use_sim_time:
+                is_go_to_home_pose_success = True
+
+                if not self._use_sim_time and self._enable_controller_switching:
+                    # UR: switch to impedance control for RL insertion
                     self.switch_to_impedance_control()
-                    # Wait to get a message on the point topic.
+                    self.get_logger().error(
+                        'Waiting for confirmation to start RL policy...'
+                        f'click any point on image. Will try to insert on TF: {gear_type}')
+                    self.wait_for_point_topic_func()
+                elif not self._use_sim_time and not self._enable_controller_switching:
+                    # Flexiv: switch from rizon_arm_controller to
+                    # streaming_position_controller for RL insertion
+                    self.switch_to_streaming_control()
                     self.get_logger().error(
                         'Waiting for confirmation to start RL policy...'
                         f'click any point on image. Will try to insert on TF: {gear_type}')
@@ -1405,12 +1491,22 @@ class IsaacRosManipulationGearAssemblyOrchestrator(RCLPYNode):
                     self.get_logger().error('RL insertion action failed')
                     return False
 
-                if not self._use_sim_time:
+                if not self._use_sim_time and self._enable_controller_switching:
+                    # UR: switch back to trajectory control
                     self.switch_to_trajectory_control()
+                elif not self._use_sim_time and not self._enable_controller_switching:
+                    # Flexiv: switch back to rizon_arm_controller for MoveIt
+                    self.switch_to_rizon_arm_control()
+
+                if not self._use_sim_time:
+                    if self._post_insertion_gripper_rotation_deg != 0.0 \
+                            and not self._enable_controller_switching:
+                        # Flexiv: rotate the last joint directly via trajectory
+                        self._rotate_last_joint(
+                            self._post_insertion_gripper_rotation_deg)
 
                     home_pose = rotated_place_pose
                     home_pose.position.z += self._offset_for_place_pose
-                    # Now do PickAndHover action on that object using get objects detected id.
                     is_go_to_home_pose_success = self.pick_and_place(
                         object_id=self._get_objects_detected_object_id,
                         gripper_closed_position=close_gripper_pos,

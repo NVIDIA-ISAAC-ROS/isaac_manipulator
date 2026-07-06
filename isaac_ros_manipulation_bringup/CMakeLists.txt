@@ -63,11 +63,14 @@ if(BUILD_TESTING)
   # Add test to check manipulator cumotion and perception
   add_launch_test(test/manipulator_cumotion_and_perception_load_test_sim_test.py TIMEOUT 300)
   add_launch_test(test/manipulator_cumotion_and_perception_load_test_realsense_test.py TIMEOUT 300)
+  add_launch_test(test/flexiv_motion_plan_with_nvblox_test.py TIMEOUT 300)
+  add_launch_test(test/flexiv_motion_plan_without_nvblox_test.py TIMEOUT 300)
 
   # Add test to check robot segmentor correctness
   add_launch_test(test/robot_segmentor_correctness_check_sim_test.py)
   add_launch_test(test/robot_segmentor_correctness_check_realsense_test.py)
   add_launch_test(test/robot_segmentor_pol_realsense_test.py TIMEOUT 100)
+  add_launch_test(test/robot_segmentor_pol_realsense_flexiv_test.py TIMEOUT 100)
   add_launch_test(test/robot_segmentor_pol_realsense_2_test.py TIMEOUT 100)
 
   # Grounding DINO test

@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 # SPDX-License-Identifier: Apache-2.0
-from typing import Tuple
+from typing import List, Tuple
 
 from geometry_msgs.msg import Pose, Vector3
 import isaac_ros_manipulation_ros_python_utils.constants as constants
@@ -27,6 +27,7 @@ from isaac_ros_manipulation_ros_python_utils.manipulator_types import (
     ObjectDetectionType,
     ObjectSelectionType,
     PoseEstimationType,
+    RobotType,
     SegmentationType,
     WorkflowType,
 )
@@ -165,6 +166,36 @@ def get_object_attachment_type(object_attachment_type: str) -> ObjectAttachmentS
         return ObjectAttachmentShape.SPHERE
     else:
         raise NotImplementedError(f'Object attachment type {object_attachment_type} not supported')
+
+
+def get_robot_type(context: LaunchContext) -> RobotType:
+    """
+    Resolve the ``robot_type`` launch arg to a ``RobotType`` enum.
+
+    The launch arg value must match one of the ``RobotType`` members
+    (case-sensitive, e.g. ``UR`` or ``FLEXIV``).
+
+    Args
+    ----
+        context (LaunchContext): Launch context
+
+    Returns
+    -------
+        RobotType: Robot type object
+
+    Raises
+    ------
+        NotImplementedError: If the ``robot_type`` launch arg value is not a
+            supported ``RobotType``
+
+    """
+    robot_type_str = get_str_variable(context, 'robot_type')
+    if robot_type_str == str(RobotType.UR):
+        return RobotType.UR
+    elif robot_type_str == str(RobotType.FLEXIV):
+        return RobotType.FLEXIV
+    else:
+        raise NotImplementedError(f'Robot type {robot_type_str} not supported !')
 
 
 def get_workflow_type(workflow_type_str: str) -> WorkflowType:
@@ -404,3 +435,118 @@ def get_segmentation_type(segmentation_type_str: str) -> SegmentationType:
     else:
         raise NotImplementedError(
             f'Segmentation type {segmentation_type_str} not supported')
+
+
+def _flexiv_frame_prefix(context: LaunchContext) -> str:
+    robot_sn = get_str_variable(context, 'robot_sn')
+    if not robot_sn:
+        raise ValueError(f'Robot SN not found for Flexiv Rizon, please set the robot_sn')
+    return f'{robot_sn}_'
+
+
+def _ur_frame_prefix(context: LaunchContext) -> str:
+    try:
+        tf_prefix = get_str_variable(context, 'tf_prefix')
+    except Exception:
+        # This is not required for UR robots, so we can return an empty string
+        return ''
+    return tf_prefix or ''
+
+
+def compute_frame_prefix(context: LaunchContext) -> str:
+    """
+    Derive the TF frame prefix for the running robot.
+
+    The prefix is resolved using the canonical launch arg for the given robot
+    family (``robot_sn`` for Flexiv, ``tf_prefix`` for UR). The robot family
+    is resolved from the ``robot_type`` launch arg via :func:`get_robot_type`.
+
+    Args
+    ----
+        context (LaunchContext): Launch context
+
+    Returns
+    -------
+        str: TF frame prefix (empty string if the family has none)
+
+    Raises
+    ------
+        ValueError: If the resolved ``robot_type`` is not a supported
+            ``RobotType``
+
+    """
+    robot_type = get_robot_type(context)
+    if robot_type is RobotType.FLEXIV:
+        return _flexiv_frame_prefix(context)
+    if robot_type is RobotType.UR:
+        return _ur_frame_prefix(context)
+    raise ValueError(f'Robot type {robot_type} not supported')
+
+
+_UR_ARM_JOINTS: Tuple[str, ...] = (
+    'shoulder_pan_joint', 'shoulder_lift_joint', 'elbow_joint',
+    'wrist_1_joint', 'wrist_2_joint', 'wrist_3_joint',
+)
+
+
+def compute_joint_names(context: LaunchContext) -> List[str]:
+    """
+    Return arm joint names for the running robot.
+
+    Flexiv Rizon exposes ``joint1``..``joint7`` and UR exposes the 6 standard
+    shoulder/elbow/wrist joints. The final names are prefixed with
+    :func:`compute_frame_prefix`. The robot family is resolved from the
+    ``robot_type`` launch arg via :func:`get_robot_type`.
+
+    Args
+    ----
+        context (LaunchContext): Launch context
+
+    Returns
+    -------
+        List[str]: Prefixed arm joint names
+
+    Raises
+    ------
+        ValueError: If the resolved ``robot_type`` is not a supported
+            ``RobotType``
+
+    """
+    robot_type = get_robot_type(context)
+    prefix = compute_frame_prefix(context)
+    if robot_type is RobotType.FLEXIV:
+        return [f'{prefix}joint{i}' for i in range(1, 8)]
+    if robot_type is RobotType.UR:
+        return [f'{prefix}{j}' for j in _UR_ARM_JOINTS]
+    raise ValueError(f'Robot type {robot_type} not supported')
+
+
+def compute_gripper_action_name(gripper_type: str) -> str:
+    """Return gripper GripperCommand action name based on gripper type."""
+    if gripper_type == 'grav':
+        return '/flexiv_gripper_node/gripper_action'
+    return '/robotiq_gripper_controller/gripper_cmd'
+
+
+def compute_gripper_positions(gripper_type: str) -> tuple:
+    """
+    Return (open_position, close_position) for the given gripper type.
+
+    Grav gripper: 0.0 = fully closed, 0.1 = fully open.
+    Robotiq gripper: 0.0 = fully open, 0.65 = fully closed.
+    """
+    if gripper_type == 'grav':
+        return (0.09, 0.0)
+    return (0.0, 0.65)
+
+
+def compute_gripper_settle_time(gripper_type: str) -> float:
+    """
+    Return settle time (seconds) to wait after a gripper action completes.
+
+    The Flexiv Grav action server returns before the gripper finishes moving,
+    so we need an extra delay.  Robotiq's controller blocks until done.
+    """
+    if gripper_type == 'grav':
+        return 2.0
+    return 0.0

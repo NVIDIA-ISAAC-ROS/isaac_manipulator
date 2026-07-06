@@ -39,7 +39,7 @@ behavior_tree_params:
       index: 0
 
     interactive_marker:
-      mesh_resource_uri: 'package://isaac_ros_manipulation_robot_description/meshes/robotiq_2f_85.obj'
+      mesh_resource_uri: 'package://isaac_ros_manipulation_ur_robot_description/meshes/robotiq_2f_85.obj'
       reference_frame: 'base_link'
       end_effector_frame: 'gripper_frame'
       user_confirmation_timeout: 60.0  # seconds to wait for user to adjust drop pose

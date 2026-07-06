@@ -14,9 +14,10 @@
 # limitations under the License.
 #
 # SPDX-License-Identifier: Apache-2.0
-"""Collects calibration data to calibrate robot with camera without calibraiton target."""
+"""Collects calibration data to calibrate robot with camera without calibration target."""
 
 import os
+import tempfile
 
 from ament_index_python.packages import get_package_share_directory
 from isaac_ros_manipulation_ros_python_utils import (
@@ -30,6 +31,7 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
 
 import pytest
+import yaml
 
 
 RUN_TEST = os.environ.get('ENABLE_MANIPULATOR_TESTING', '').lower() == 'manual_on_robot'
@@ -40,25 +42,23 @@ OUTPUT_DIR = os.path.join(os.environ['ISAAC_ROS_WS'], 'calibration_dataset_targe
 def generate_test_description():
     """Generate launch description with Foundation Pose nodes for testing."""
     CollectTargetLessCalibrationDataTest.generate_namespace()
-    isaac_ros_manipulation_workflow_bringup_include_dir = os.path.join(
+    isaac_ros_manipulation_bringup_launch_dir = os.path.join(
         get_package_share_directory('isaac_ros_manipulation_bringup'),
-        'launch', 'workflows')
-    sensor_include_dir = os.path.join(
-        get_package_share_directory('isaac_ros_manipulation_bringup'),
-        'launch', 'sensors')
-    driver_include_dir = os.path.join(
-        get_package_share_directory('isaac_ros_manipulation_bringup'),
-        'launch', 'drivers')
+        'launch')
 
+    ur_robotiq_driver_launch = os.path.join(
+        get_package_share_directory('isaac_ros_manipulation_ur_driver_utils'),
+        'launch', 'ur_robotiq_driver.launch.py')
     params = get_params_from_config_file_set_in_env(RUN_TEST)
 
-    # Override params to be PICK and PLACE
+    # Env test config plus workflow overrides; drivers.launch needs robot_launch_file_path in YAML
     override_params = {
         'workflow_type': 'PICK_AND_PLACE',
         'camera_type': 'REALSENSE',
         'num_cameras': '2',
         'manual_mode': 'true',
-        'headless': 'true'
+        'headless': 'true',
+        'robot_launch_file_path': ur_robotiq_driver_launch
     }
     params.update(override_params)
 
@@ -69,18 +69,25 @@ def generate_test_description():
     if RUN_TEST:
         node_startup_delay = 12.0
         cumotion_urdf_file_path = params['cumotion_urdf_file_path']
+        # drivers.launch.py loads workflow from a file; write merged test config (same as bringup)
+        fd, merged_workflow = tempfile.mkstemp(
+            suffix='.yaml', prefix='collect_targetless_calib_')
+        os.close(fd)
+        with open(merged_workflow, 'w', encoding='utf-8') as out:
+            yaml.dump(params, out, default_flow_style=False, sort_keys=False)
+        # Match workflows.launch.py: sensors, core, then driver routing (drivers.launch.py).
         test_nodes.append(IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
-                [driver_include_dir, '/ur_robotiq_driver.launch.py']),
+                [isaac_ros_manipulation_bringup_launch_dir, '/sensors/cameras.launch.py']),
             launch_arguments={key: str(value) for key, value in params.items()}.items()))
         test_nodes.append(IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
-                [sensor_include_dir, '/cameras.launch.py']),
+                [isaac_ros_manipulation_bringup_launch_dir, '/workflows/core.launch.py']),
             launch_arguments={key: str(value) for key, value in params.items()}.items()))
         test_nodes.append(IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
-                [isaac_ros_manipulation_workflow_bringup_include_dir, '/core.launch.py']),
-            launch_arguments={key: str(value) for key, value in params.items()}.items()))
+                [isaac_ros_manipulation_bringup_launch_dir, '/drivers.launch.py']),
+            launch_arguments={'manipulator_workflow_config': merged_workflow}.items()))
     else:
         # Makes the test pass if we do not want to run on CI
         test_nodes.append(Node(

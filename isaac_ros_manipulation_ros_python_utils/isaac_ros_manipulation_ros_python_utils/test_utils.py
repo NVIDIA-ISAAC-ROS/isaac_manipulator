@@ -2323,6 +2323,72 @@ class DriverTest(IsaacROSBaseTest):
             )
 
 
+class FlexivDriverTest(IsaacROSBaseTest):
+    """
+    Verify Flexiv Rizon driver nodes are running.
+
+    Flexiv mirror of :class:`DriverTest`. Asserts the control-plane and MoveIt
+    nodes that the Flexiv Rizon real-robot driver stack brings up when routed
+    through the bringup plugin (``drivers.launch.py`` -> Flexiv real driver).
+    """
+
+    _run_test: bool = False
+    _use_sim_time: bool = False
+    _node_startup_delay: float = 0.0
+
+    @classmethod
+    def generate_test_description(cls, run_test: bool,
+                                  use_sim_time: bool,
+                                  nodes: list[Node],
+                                  node_startup_delay: float):
+        cls._run_test = run_test
+        cls._use_sim_time = use_sim_time
+        cls._node_startup_delay = node_startup_delay
+        return super().generate_test_description(
+            nodes=nodes,
+            node_startup_delay=node_startup_delay
+        )
+
+    def setUp(self) -> None:
+        """Set up before each test method."""
+        self.node = rclpy.create_node(
+            'isaac_ros_base_test_node',
+            namespace=self.generate_namespace(),
+        )
+
+        if self._use_sim_time:
+            self.node.set_parameters([Parameter('use_sim_time', Parameter.Type.BOOL, True)])
+
+    def test_driver_nodes_running(self):
+        """Verify Flexiv driver nodes are running."""
+        if not self._run_test:
+            self.node.get_logger().warn('RUN_TEST is not set to true')
+            return
+
+        time.sleep(self._node_startup_delay)
+
+        running_nodes = self.node.get_node_names()
+        self.node.get_logger().info(f'Running nodes: {running_nodes}')
+
+        # Core nodes brought up by flexiv_rizon_real_driver.launch.py on every run,
+        # independent of use_fake_hardware/load_gripper gating.
+        control_nodes_that_should_be_running = [
+            'move_group',
+            'controller_manager',
+            'robot_state_publisher',
+            'joint_state_publisher',
+            'joint_state_broadcaster',
+            'rizon_arm_controller',
+        ]
+
+        for node in control_nodes_that_should_be_running:
+            self.assertIn(
+                node,
+                running_nodes,
+                f'{node} is not running when it should be running'
+            )
+
+
 class TestGearPointPublisher(IsaacROSBaseTest):
     """Node that publishes gear coordinates in round-robin fashion for testing."""
 
@@ -2401,7 +2467,7 @@ class TestGearPointPublisher(IsaacROSBaseTest):
         mesh_file_name = f'{gear_name}.obj'
 
         mesh_file_path = f'{ISAAC_ROS_WS}/isaac_ros_assets/' \
-                         f'isaac_ros_manipulation_ur_dnn_policy/{gear_name}/{mesh_file_name}'
+                         f'isaac_ros_manipulation_dnn_policy/{gear_name}/{mesh_file_name}'
 
         # Create a parameter client
         param_client = self.node.create_client(

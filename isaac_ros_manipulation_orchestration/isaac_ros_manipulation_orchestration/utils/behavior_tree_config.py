@@ -45,7 +45,8 @@ class BehaviorTreeConfigInitializer:
     def __init__(
         self,
         behavior_tree_params_file: str,
-        package_name: str
+        package_name: str,
+        frame_prefix: str = '',
     ):
         """
         Initialize the behavior tree configuration initializer.
@@ -55,9 +56,14 @@ class BehaviorTreeConfigInitializer:
         behavior_tree_params_file (str): Path to the behavior tree parameters YAML file.
             Expected to contain all necessary behavior configuration parameters.
         package_name (str): Name of the package to load parameters from.
+        frame_prefix (str): TF prefix from the launch chain, prepended to
+            attach/detach gripper/grasp frame names. ``''`` for robots that
+            publish bare frame names (e.g. UR).
 
         """
-        self.config = MultiObjPickPlaceConfig(behavior_tree_params_file, package_name)
+        self.config = MultiObjPickPlaceConfig(
+            behavior_tree_params_file, package_name, frame_prefix=frame_prefix
+        )
 
     def get_plan_to_grasp_config(self) -> PlanToGraspConfig:
         """Get plan_to_grasp configuration."""

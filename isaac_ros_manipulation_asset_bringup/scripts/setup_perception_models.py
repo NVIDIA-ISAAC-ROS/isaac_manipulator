@@ -63,7 +63,7 @@ class ModelSetup:
         dope_assets: Optional[Path] = None,
         segment_anything_assets: Optional[Path] = None,
         segment_anything2_assets: Optional[Path] = None,
-        ur_dnn_policy_assets: Optional[Path] = None,
+        dnn_policy_assets: Optional[Path] = None,
         sam_model_assets: Optional[Path] = None,
         sam2_model_assets: Optional[Path] = None
     ):
@@ -86,8 +86,8 @@ class ModelSetup:
                 Path to cached Segment Anything assets
             segment_anything2_assets
                 Path to cached Segment Anything 2 assets
-            ur_dnn_policy_assets
-                Path to cached UR DNN Policy assets
+            dnn_policy_assets
+                Path to cached DNN Policy assets
             sam_model_assets
                 Path to cached SAM model assets
             sam2_model_assets
@@ -126,7 +126,7 @@ class ModelSetup:
         self.dope_assets = dope_assets
         self.segment_anything_assets = segment_anything_assets
         self.segment_anything2_assets = segment_anything2_assets
-        self.ur_dnn_policy_assets = ur_dnn_policy_assets
+        self.dnn_policy_assets = dnn_policy_assets
         self.sam_model_assets = sam_model_assets
         self.sam2_model_assets = sam2_model_assets
 
@@ -358,7 +358,7 @@ class ModelSetup:
         sam_dir = self.assets_dir / 'isaac_ros_segment_anything'
         sam_dir.mkdir(parents=True, exist_ok=True)
 
-        models_sam_dir = self.models_dir / 'segment_anything' / '1'
+        models_sam_dir = self.models_dir / 'triton' / 'segment_anything' / '1'
         models_sam_dir.mkdir(parents=True, exist_ok=True)
 
         # Download the PTH file
@@ -413,7 +413,7 @@ class ModelSetup:
 
         # Copy the config file
         config_src = sam_dir / 'sam_config_onnx.pbtxt'
-        config_dst = self.models_dir / 'segment_anything' / 'config.pbtxt'
+        config_dst = self.models_dir / 'triton' / 'segment_anything' / 'config.pbtxt'
 
         if (not config_dst.exists() and config_src.exists()) or self.force:
             self.logger.info(f'Copying config file from {config_src} to {config_dst}')
@@ -485,7 +485,7 @@ class ModelSetup:
         sam2_dir = self.assets_dir / 'isaac_ros_segment_anything2'
         sam2_dir.mkdir(parents=True, exist_ok=True)
 
-        models_sam2_dir = self.models_dir / 'segment_anything2' / '1'
+        models_sam2_dir = self.models_dir / 'triton' / 'segment_anything2' / '1'
         models_sam2_dir.mkdir(parents=True, exist_ok=True)
 
         # Download the PyTorch weights from official SAM2 repo
@@ -560,7 +560,7 @@ class ModelSetup:
 
         # Copy the config file
         config_src = sam2_dir / 'sam2_config.pbtxt'
-        config_dst = self.models_dir / 'segment_anything2' / 'config.pbtxt'
+        config_dst = self.models_dir / 'triton' / 'segment_anything2' / 'config.pbtxt'
 
         if (not config_dst.exists() and config_src.exists()) or self.force:
             self.logger.info(f'Copying config file from {config_src} to {config_dst}')
@@ -577,7 +577,7 @@ class ModelSetup:
 
         # Copy the warmup data
         warmup_src = sam2_dir / 'warmup'
-        warmup_dst = self.models_dir / 'segment_anything2' / 'warmup'
+        warmup_dst = self.models_dir / 'triton' / 'segment_anything2' / 'warmup'
 
         if warmup_src.exists() and (not warmup_dst.exists() or self.force):
             self.logger.info(f'Copying warmup data from {warmup_src} to {warmup_dst}')
@@ -634,7 +634,7 @@ class ModelSetup:
 
     def setup_gear_assembly(self) -> bool:
         """
-        Set up the UR DNN Policy assets.
+        Set up the DNN Policy assets.
 
         Returns
         -------
@@ -642,22 +642,24 @@ class ModelSetup:
             True if setup was successful, False otherwise
 
         """
-        self.logger.info('=== Setting up UR DNN Policy assets ===')
+        self.logger.info('=== Setting up DNN Policy assets ===')
 
-        # Check if UR DNN Policy assets already exist
-        ur_dnn_policy_dir = self.assets_dir / 'isaac_ros_manipulation_ur_dnn_policy'
+        # Check if DNN Policy assets already exist
+        dnn_policy_dir = self.assets_dir / 'isaac_ros_manipulation_dnn_policy'
 
-        if not ur_dnn_policy_dir.exists():
+        if not dnn_policy_dir.exists() or self.force:
+            # remove the directory if it exists, in case of force download
+            shutil.rmtree(dnn_policy_dir, ignore_errors=True)
             url = 'https://api.ngc.nvidia.com/v2/resources/org/nvidia/team/' \
-                  'isaac/isaac_manipulator_ur_dnn_policy_assets/4.0.0/' \
+                  'isaac/isaac_ros_manipulation_dnn_policy/4.5.0/' \
                   'files?redirect=true&path=quickstart.tar.gz'
-            if not self.process_urls(self.assets_dir, [url], 'quickstart.tar.gz'):
+            if not self.process_urls(
+                self.assets_dir, [url], 'quickstart.tar.gz',
+                cache_path=self.dnn_policy_assets
+            ):
                 return False
-            # now move isaac_ros_manipulator_ur_dnn_policy to isaac_ros_manipulation_ur_dnn_policy
-            shutil.move(self.assets_dir / 'isaac_manipulator_ur_dnn_policy',
-                        self.assets_dir / 'isaac_ros_manipulation_ur_dnn_policy')
         else:
-            self.logger.info(f'UR DNN Policy assets already exist at {ur_dnn_policy_dir} - '
+            self.logger.info(f'DNN Policy assets already exist at {dnn_policy_dir} - '
                              'Skipping download')
 
         return True
@@ -739,7 +741,7 @@ def parse_args():
     # determine the workspace path.
     # This is useful when running from bazel.
     if model_path and model_path.strip():
-        base_path = os.path.abspath(os.path.dirname(model_path) + '/../../../..')
+        base_path = os.path.abspath(os.path.dirname(model_path) + '/../../../../..')
     elif base_path is None or base_path == '':
         raise ValueError(
             'Either ISAAC_ROS_ASSET_MODEL_PATH or ISAAC_ROS_WS environment variable must be set'
@@ -814,10 +816,10 @@ def parse_args():
     )
 
     parser.add_argument(
-        '--ur-dnn-policy-assets',
+        '--dnn-policy-assets',
         type=str,
         default=None,
-        help='Path to the UR DNN Policy assets'
+        help='Path to the DNN Policy assets'
     )
 
     parser.add_argument(
@@ -852,7 +854,7 @@ def main() -> int:
         dope_assets=args.dope_assets,
         segment_anything_assets=args.segment_anything_assets,
         segment_anything2_assets=args.segment_anything2_assets,
-        ur_dnn_policy_assets=args.ur_dnn_policy_assets,
+        dnn_policy_assets=args.dnn_policy_assets,
         sam_model_assets=args.sam_model_assets,
         sam2_model_assets=args.sam2_model_assets,
     )

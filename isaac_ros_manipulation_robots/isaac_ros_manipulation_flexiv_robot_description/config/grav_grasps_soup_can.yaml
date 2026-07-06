@@ -1,0 +1,60 @@
+format: isaac_grasp
+format_version: 1.0
+
+object_frame_link: /soup_can
+gripper_frame_link: /grav_base_link
+
+grasps:
+   grasp_0:
+      confidence: 1.0
+      position: [0.004, 0.25, -0.012]
+      orientation: {w: 0.015, xyz: [-0.014, -0.696, 0.718]}
+      cspace_position:
+         finger_joint: 0.35
+      pregrasp_cspace_position:
+         finger_joint: 0.7854
+
+   grasp_1:
+      confidence: 1.0
+      position: [0.010, 0.25, -0.003]
+      orientation: {w: -0.017, xyz: [0.018, 0.718, -0.696]}
+      cspace_position:
+         finger_joint: 0.35
+      pregrasp_cspace_position:
+         finger_joint: 0.7854
+
+   grasp_2:
+      confidence: 1.0
+      position: [-0.005, 0.25, -0.010]
+      orientation: {w: 0.706, xyz: [0.708, 0.010, -0.0003]}
+      cspace_position:
+         finger_joint: 0.33
+      pregrasp_cspace_position:
+         finger_joint: 0.7854
+
+   grasp_3:
+      confidence: 1.0
+      position: [-0.003, 0.25, -0.007]
+      orientation: {w: 0.706, xyz: [0.708, 0.010, 0.0003]}
+      cspace_position:
+         finger_joint: 0.33
+      pregrasp_cspace_position:
+         finger_joint: 0.7854
+
+   grasp_4:
+      confidence: 1.0
+      position: [0.001, 0.25, -0.003]
+      orientation: {w: 0.632, xyz: [0.638, 0.315, -0.306]}
+      cspace_position:
+         finger_joint: 0.30
+      pregrasp_cspace_position:
+         finger_joint: 0.7854
+
+   grasp_5:
+      confidence: 1.0
+      position: [-0.001, 0.26, -0.009]
+      orientation: {w: 0.688, xyz: [0.687, -0.160, 0.169]}
+      cspace_position:
+         finger_joint: 0.30
+      pregrasp_cspace_position:
+         finger_joint: 0.7854

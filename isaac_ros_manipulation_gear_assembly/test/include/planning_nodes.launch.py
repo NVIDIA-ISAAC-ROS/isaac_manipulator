@@ -20,8 +20,8 @@ from isaac_ros_manipulation_ros_python_utils import (
     CoreConfig, DepthType, get_cumotion_node,
     get_manipulation_container,
 )
-from isaac_ros_manipulation_ros_python_utils.config import UrRobotiqDriverConfig
-from isaac_ros_manipulation_ros_python_utils.drivers import get_robot_state_publisher
+from isaac_ros_manipulation_ur_driver_utils import URDriverUtils
+from isaac_ros_manipulation_ur_driver_utils.config import UrRobotiqDriverConfig
 
 from launch import LaunchDescription
 from launch.actions import (
@@ -49,7 +49,7 @@ def launch_setup(context, *args, **kwargs):
         read_esdf_world=core_config.enable_nvblox,
         core_config=core_config
     ))
-    manipulator_init_nodes.append(get_robot_state_publisher(driver_config))
+    manipulator_init_nodes.append(URDriverUtils(driver_config).get_robot_state_publisher())
     return manipulator_init_nodes
 
 

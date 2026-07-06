@@ -97,7 +97,7 @@ class TestLoadYamlParams(unittest.TestCase):
         self.assertEqual(len(params['sam_model_repository_paths']), 1)
         self.assertEqual(
             params['sam_model_repository_paths'][0],
-            f'{ISAAC_ROS_WS}/isaac_ros_assets/models')
+            f'{ISAAC_ROS_WS}/isaac_ros_assets/models/triton')
 
         # also check the scene objects file path
         self.assertEqual(

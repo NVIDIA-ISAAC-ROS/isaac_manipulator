@@ -44,6 +44,7 @@ class MultiObjectPickPlaceOrchestrator:
                  print_ascii_tree: bool = False,
                  manual_mode: bool = False,
                  log_level: str = None,
+                 frame_prefix: str = '',
                  ):
         """
         Initialize orchestrator with all necessary components.
@@ -60,6 +61,9 @@ class MultiObjectPickPlaceOrchestrator:
             Enable manual mode for tree ticking
         log_level : str, optional
             Explicit log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        frame_prefix : str, optional
+            TF prefix from the bringup config, prepended to attach/detach
+            gripper/grasp frames. ``''`` for robots with bare frame names.
 
         """
         # Determine log level if not explicitly provided
@@ -94,10 +98,12 @@ class MultiObjectPickPlaceOrchestrator:
 
         self.behavior_tree_config_file = behavior_tree_config_file
         self.blackboard_config_file = blackboard_config_file
+        self.frame_prefix = frame_prefix
 
         self.logger.info('Initializing MultiObjectPickPlaceOrchestrator')
         self.logger.debug(f'Behavior tree config: {behavior_tree_config_file}')
         self.logger.debug(f'Blackboard config: {blackboard_config_file}')
+        self.logger.debug(f'Frame prefix: {frame_prefix!r}')
 
         # Initialize all components
         self._initialize_rclpy()
@@ -143,7 +149,8 @@ class MultiObjectPickPlaceOrchestrator:
         self.logger.info('Setting up behavior tree')
         behavior_config_initializer = BehaviorTreeConfigInitializer(
             self.behavior_tree_config_file,
-            package_name='isaac_ros_manipulation_pick_and_place'
+            package_name='isaac_ros_manipulation_pick_and_place',
+            frame_prefix=self.frame_prefix,
         )
 
         # Create the behavior tree
@@ -172,7 +179,8 @@ class MultiObjectPickPlaceOrchestrator:
         # Setup retry configuration
         behavior_config_initializer = BehaviorTreeConfigInitializer(
             self.behavior_tree_config_file,
-            package_name='isaac_ros_manipulation_pick_and_place'
+            package_name='isaac_ros_manipulation_pick_and_place',
+            frame_prefix=self.frame_prefix,
         )
         retry_config = behavior_config_initializer.get_retry_config()
         blackboard_initializer.setup_retry_configuration(retry_config)
@@ -502,6 +510,10 @@ def main():
     parser.add_argument('--blackboard_config_file', type=str,
                         default='multi_object_pick_and_place_blackboard_params.yaml',
                         help='Path to the blackboard configuration file')
+    parser.add_argument('--frame_prefix', type=str, default='',
+                        help=('TF prefix from the bringup config (e.g. '
+                              '"Rizon4s-062840_"); prepended to attach/detach '
+                              'frame names.'))
 
     args = parser.parse_args()
 
@@ -512,6 +524,7 @@ def main():
         print_ascii_tree=getattr(args, 'print_ascii_tree', False),
         manual_mode=getattr(args, 'manual_mode', False),
         log_level=getattr(args, 'log_level', None),
+        frame_prefix=getattr(args, 'frame_prefix', ''),
     )
     try:
         orchestrator.run()
