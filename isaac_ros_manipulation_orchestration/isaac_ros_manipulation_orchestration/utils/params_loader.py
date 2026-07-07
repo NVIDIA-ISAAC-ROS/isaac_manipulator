@@ -247,14 +247,20 @@ class ObjectAttachDetachConfig:
     grasp_frame: str
 
     @classmethod
-    def from_dict(cls, params: Dict[str, Any]) -> 'ObjectAttachDetachConfig':
+    def from_dict(
+        cls,
+        params: Dict[str, Any],
+        frame_prefix: str = '',
+    ) -> 'ObjectAttachDetachConfig':
+        gripper_frame = params.get('gripper_frame', 'gripper_frame')
+        grasp_frame = params.get('grasp_frame', 'grasp_frame')
         return cls(
             action_server_name=params.get(
                 'action_server_name', 'attach_object'),
             shape=params.get('shape', 'CUBOID'),
             scale=params.get('scale', [0.1, 0.1, 0.2]),
-            gripper_frame=params.get('gripper_frame', 'gripper_frame'),
-            grasp_frame=params.get('grasp_frame', 'grasp_frame')
+            gripper_frame=f'{frame_prefix}{gripper_frame}',
+            grasp_frame=f'{frame_prefix}{grasp_frame}',
         )
 
 
@@ -312,7 +318,7 @@ class InteractiveMarkerConfig:
         return cls(
             mesh_resource_uri=params.get(
                 'mesh_resource_uri',
-                'package://isaac_ros_manipulation_robot_description/meshes/robotiq_2f_85.obj'
+                'package://isaac_ros_manipulation_ur_robot_description/meshes/robotiq_2f_85.obj'
             ),
             reference_frame=params.get('reference_frame', 'base_link'),
             end_effector_frame=params.get('end_effector_frame', 'gripper_frame'),
@@ -526,7 +532,8 @@ class MultiObjPickPlaceConfig(BehaviorTreeConfig):
     def __init__(
         self,
         behavior_tree_params_file: str,
-        package_name: str
+        package_name: str,
+        frame_prefix: str = '',
     ):
         """
         Initialize multi-object pick and place behavior tree configuration.
@@ -535,6 +542,9 @@ class MultiObjPickPlaceConfig(BehaviorTreeConfig):
         ----
         behavior_tree_params_file (str): Path to the behavior tree parameters YAML file.
         package_name (str): Name of the package to load parameters from.
+        frame_prefix (str): TF prefix from the launch chain, prepended to
+            attach/detach gripper/grasp frame names. ``''`` for robots that
+            publish bare frame names (e.g. UR).
 
         """
         super().__init__(behavior_tree_params_file, package_name)
@@ -553,9 +563,13 @@ class MultiObjPickPlaceConfig(BehaviorTreeConfig):
         self.open_gripper = OpenGripperConfig.from_dict(
             multi_obj_params.get('open_gripper', {}))
         self.attach_object = ObjectAttachDetachConfig.from_dict(
-            multi_obj_params.get('attach_object', {}))
+            multi_obj_params.get('attach_object', {}),
+            frame_prefix=frame_prefix,
+        )
         self.detach_object = ObjectAttachDetachConfig.from_dict(
-            multi_obj_params.get('detach_object', {}))
+            multi_obj_params.get('detach_object', {}),
+            frame_prefix=frame_prefix,
+        )
         self.execute_trajectory = ExecuteTrajectoryConfig.from_dict(
             multi_obj_params.get('execute_trajectory', {}))
         self.interactive_marker = InteractiveMarkerConfig.from_dict(

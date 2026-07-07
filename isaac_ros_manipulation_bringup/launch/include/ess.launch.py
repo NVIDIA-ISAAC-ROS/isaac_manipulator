@@ -15,6 +15,9 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+import os
+import platform
+
 import isaac_ros_manipulation_ros_python_utils.constants as constants
 from isaac_ros_manipulation_ros_python_utils.launch_utils import get_dnn_stereo_depth_resolution
 from isaac_ros_manipulation_ros_python_utils.manipulator_types import CameraType, DepthType
@@ -37,6 +40,15 @@ def launch_setup(context, *args, **kwargs):
         context.perform_substitution(LaunchConfiguration('ess_engine_file_path')))
     if engine_file_path == '':
         raise ValueError('ess_engine_file_path is not set.')
+
+    ess_plugin_file_path = str(
+        context.perform_substitution(LaunchConfiguration('ess_plugin_file_path')))
+    if ess_plugin_file_path == '':
+        ess_plugin_file_path = os.path.join(
+            os.path.dirname(engine_file_path), 'plugins', platform.machine(), 'ess_plugins.so')
+    if not os.path.isfile(ess_plugin_file_path):
+        raise FileNotFoundError(
+            f'ESS TensorRT plugin library does not exist: {ess_plugin_file_path}')
 
     threshold = LaunchConfiguration('ess_threshold')
     composable_node_descriptions = []
@@ -93,23 +105,168 @@ def launch_setup(context, *args, **kwargs):
     else:
         raise ValueError(f'Invalid camera type {camera_type}')
 
+    network_width = int(ess_model_width)
+    network_height = int(ess_model_height)
+
     composable_node_descriptions.append(ComposableNode(
-        name='disparity',
-        package='isaac_ros_ess',
-        plugin='nvidia::isaac_ros::dnn_stereo_depth::ESSDisparityNode',
+        name='left_format_node', package='isaac_ros_image_proc',
+        plugin='nvidia::isaac_ros::image_proc::ImageFormatConverterNode',
         namespace=camera_name,
-        parameters=[{'engine_file_path': engine_file_path,
-                     'threshold': threshold,
-                     'input_qos': 'SENSOR_DATA',
-                     'input_layer_width': int(ess_model_width),
-                     'input_layer_height': int(ess_model_height)}],
+        parameters=[{'encoding_desired': 'rgb8', 'input_qos': 'SENSOR_DATA'}],
+        remappings=[('image_raw', 'left/image_rect'), ('image', 'left/image_rgb')]))
+
+    composable_node_descriptions.append(ComposableNode(
+        name='left_resize_node', package='isaac_ros_image_proc',
+        plugin='nvidia::isaac_ros::image_proc::ResizeNode',
+        namespace=camera_name,
+        parameters=[{
+            'output_width': network_width, 'output_height': network_height,
+            'keep_aspect_ratio': False,
+            'input_qos': 'SENSOR_DATA',
+        }],
         remappings=[
-            ('left/camera_info', camera_info_left_for_disparity),
-            ('right/camera_info', camera_info_right_for_disparity),
-            ('left/image_rect', 'left/image_rect'),
-            ('right/image_rect', 'right/image_rect'),
-        ]
-    ))
+            ('image', 'left/image_rgb'),
+            ('camera_info', camera_info_left_for_disparity),
+            ('resize/image', 'left/image_resize'),
+            ('resize/camera_info', 'left/camera_info_resize'),
+        ]))
+
+    composable_node_descriptions.append(ComposableNode(
+        name='left_normalize_node', package='isaac_ros_image_proc',
+        plugin='nvidia::isaac_ros::image_proc::ImageNormalizeNode',
+        namespace=camera_name,
+        parameters=[{'mean': [127.5, 127.5, 127.5], 'stddev': [127.5, 127.5, 127.5]}],
+        remappings=[('image', 'left/image_resize'),
+                    ('normalized_image', 'left/image_normalize')]))
+
+    composable_node_descriptions.append(ComposableNode(
+        name='left_tensor_node', package='isaac_ros_tensor_proc',
+        plugin='nvidia::isaac_ros::dnn_inference::ImageToTensorNode',
+        namespace=camera_name,
+        parameters=[{'scale': False, 'tensor_name': 'left_image'}],
+        remappings=[('image', 'left/image_normalize'), ('tensor', 'left/tensor')]))
+
+    composable_node_descriptions.append(ComposableNode(
+        name='left_planar_node', package='isaac_ros_tensor_proc',
+        plugin='nvidia::isaac_ros::dnn_inference::InterleavedToPlanarNode',
+        namespace=camera_name,
+        parameters=[{
+            'input_tensor_shape': [network_height, network_width, 3],
+            'output_tensor_name': 'left_image',
+        }],
+        remappings=[('interleaved_tensor', 'left/tensor'),
+                    ('planar_tensor', 'left/tensor_planar')]))
+
+    composable_node_descriptions.append(ComposableNode(
+        name='left_reshape_node', package='isaac_ros_tensor_proc',
+        plugin='nvidia::isaac_ros::dnn_inference::ReshapeNode',
+        namespace=camera_name,
+        parameters=[{
+            'output_tensor_name': 'left_image',
+            'input_tensor_shape': [3, network_height, network_width],
+            'output_tensor_shape': [1, 3, network_height, network_width],
+        }],
+        remappings=[('tensor', 'left/tensor_planar'),
+                    ('reshaped_tensor', 'left/tensor_reshape')]))
+
+    composable_node_descriptions.append(ComposableNode(
+        name='right_format_node', package='isaac_ros_image_proc',
+        plugin='nvidia::isaac_ros::image_proc::ImageFormatConverterNode',
+        namespace=camera_name,
+        parameters=[{'encoding_desired': 'rgb8', 'input_qos': 'SENSOR_DATA'}],
+        remappings=[('image_raw', 'right/image_rect'), ('image', 'right/image_rgb')]))
+
+    composable_node_descriptions.append(ComposableNode(
+        name='right_resize_node', package='isaac_ros_image_proc',
+        plugin='nvidia::isaac_ros::image_proc::ResizeNode',
+        namespace=camera_name,
+        parameters=[{
+            'output_width': network_width, 'output_height': network_height,
+            'keep_aspect_ratio': False,
+            'input_qos': 'SENSOR_DATA',
+        }],
+        remappings=[
+            ('image', 'right/image_rgb'),
+            ('camera_info', camera_info_right_for_disparity),
+            ('resize/image', 'right/image_resize'),
+            ('resize/camera_info', 'right/camera_info_resize'),
+        ]))
+
+    composable_node_descriptions.append(ComposableNode(
+        name='right_normalize_node', package='isaac_ros_image_proc',
+        plugin='nvidia::isaac_ros::image_proc::ImageNormalizeNode',
+        namespace=camera_name,
+        parameters=[{'mean': [127.5, 127.5, 127.5], 'stddev': [127.5, 127.5, 127.5]}],
+        remappings=[('image', 'right/image_resize'),
+                    ('normalized_image', 'right/image_normalize')]))
+
+    composable_node_descriptions.append(ComposableNode(
+        name='right_tensor_node', package='isaac_ros_tensor_proc',
+        plugin='nvidia::isaac_ros::dnn_inference::ImageToTensorNode',
+        namespace=camera_name,
+        parameters=[{'scale': False, 'tensor_name': 'right_image'}],
+        remappings=[('image', 'right/image_normalize'), ('tensor', 'right/tensor')]))
+
+    composable_node_descriptions.append(ComposableNode(
+        name='right_planar_node', package='isaac_ros_tensor_proc',
+        plugin='nvidia::isaac_ros::dnn_inference::InterleavedToPlanarNode',
+        namespace=camera_name,
+        parameters=[{
+            'input_tensor_shape': [network_height, network_width, 3],
+            'output_tensor_name': 'right_image',
+        }],
+        remappings=[('interleaved_tensor', 'right/tensor'),
+                    ('planar_tensor', 'right/tensor_planar')]))
+
+    composable_node_descriptions.append(ComposableNode(
+        name='right_reshape_node', package='isaac_ros_tensor_proc',
+        plugin='nvidia::isaac_ros::dnn_inference::ReshapeNode',
+        namespace=camera_name,
+        parameters=[{
+            'output_tensor_name': 'right_image',
+            'input_tensor_shape': [3, network_height, network_width],
+            'output_tensor_shape': [1, 3, network_height, network_width],
+        }],
+        remappings=[('tensor', 'right/tensor_planar'),
+                    ('reshaped_tensor', 'right/tensor_reshape')]))
+
+    composable_node_descriptions.append(ComposableNode(
+        name='tensor_pair_sync_node', package='isaac_ros_tensor_proc',
+        plugin='nvidia::isaac_ros::dnn_inference::TensorPairSyncNode',
+        namespace=camera_name,
+        parameters=[{
+            'input_tensor1_name': 'left_image', 'input_tensor2_name': 'right_image',
+            'output_tensor1_name': 'input_left', 'output_tensor2_name': 'input_right',
+        }],
+        remappings=[('tensor1', 'left/tensor_reshape'),
+                    ('tensor2', 'right/tensor_reshape')]))
+
+    composable_node_descriptions.append(ComposableNode(
+        name='tensor_rt', package='isaac_ros_tensor_rt',
+        plugin='nvidia::isaac_ros::dnn_inference::TensorRTNode',
+        namespace=camera_name,
+        parameters=[{
+            'engine_file_path': engine_file_path,
+            'input_tensor_names': ['input_left', 'input_right'],
+            'input_binding_names': ['input_left', 'input_right'],
+            'output_tensor_names': ['output_left', 'output_conf'],
+            'output_binding_names': ['output_left', 'output_conf'],
+            'verbose': False,
+            'force_engine_update': False,
+            'custom_plugin_lib': ess_plugin_file_path,
+        }]))
+
+    composable_node_descriptions.append(ComposableNode(
+        name='dnn_stereo_decoder', package='isaac_ros_dnn_stereo_decoder',
+        plugin='nvidia::isaac_ros::dnn_stereo_depth::DNNStereoDecoderNode',
+        namespace=camera_name,
+        parameters=[{
+            'disparity_tensor_name': 'output_left',
+            'confidence_tensor_name': 'output_conf',
+            'confidence_threshold': threshold,
+            'cache_camera_info': True,
+        }],
+        remappings=[('right/camera_info', 'right/camera_info_resize')]))
 
     composable_node_descriptions.append(ComposableNode(
         name='DisparityToDepthNode',
@@ -169,6 +326,11 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'ess_engine_file_path',
             description='Absolute path to the ESS engine plan.'),
+        DeclareLaunchArgument(
+            'ess_plugin_file_path',
+            default_value='',
+            description='Absolute path to the ESS TensorRT plugin library. '
+                        'Defaults to plugins/<arch>/ess_plugins.so next to the ESS engine.'),
         DeclareLaunchArgument(
             'ess_threshold',
             default_value='0.4',

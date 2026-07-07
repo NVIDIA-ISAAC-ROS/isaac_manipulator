@@ -19,10 +19,12 @@ from typing import List
 
 import isaac_ros_launch_utils as lu
 from isaac_ros_launch_utils.all_types import Action, LaunchDescription
-from isaac_ros_manipulation_ros_python_utils.manipulator_types import CameraType, TrackingType
+from isaac_ros_manipulation_ros_python_utils.manipulator_types import (
+    CameraType, RobotType, TrackingType,
+)
 
 
-gear_assembly_transforms_dict = {
+ur_gear_assembly_transforms_dict = {
     'gear_assembly_pose_gear_shaft_small_frame': {
         'parent_frame': 'gear_assembly_frame',
         'child_frame': 'gear_shaft_small',
@@ -41,6 +43,30 @@ gear_assembly_transforms_dict = {
         'translation': [-0.039175, 0.0, -0.0188],
         'rotation': [0.0, 0.0, 0.0, 1.0]
     },
+}
+
+flexiv_gear_assembly_transforms_dict = {
+    'gear_assembly_pose_gear_shaft_small_frame': {
+        'parent_frame': 'gear_assembly_frame',
+        'child_frame': 'gear_shaft_small',
+        'translation': [0.076125, 0.0, 0.0],
+        'rotation': [0.0, 0.0, 0.0, 1.0]
+    },
+    'gear_assembly_pose_gear_shaft_medium_frame': {
+        'parent_frame': 'gear_assembly_frame',
+        'child_frame': 'gear_shaft_medium',
+        'translation': [0.030375, 0.0, 0.0],
+        'rotation': [0.0, 0.0, 0.0, 1.0]
+    },
+    'gear_assembly_pose_gear_shaft_large_frame': {
+        'parent_frame': 'gear_assembly_frame',
+        'child_frame': 'gear_shaft_large',
+        'translation': [-0.045375, 0.0, 0.0],
+        'rotation': [0.0, 0.0, 0.0, 1.0]
+    },
+}
+
+gear_assembly_grasp_frame_dict = {
     'object_pose_grasp_frame': {
         'parent_frame': 'detected_object1',
         'child_frame': 'goal_frame',
@@ -48,6 +74,14 @@ gear_assembly_transforms_dict = {
         'rotation': [0, 0, 0, 1],  # [qx, qy ,qz, qw]
     },
 }
+
+
+def get_gear_assembly_transforms(robot_type: str) -> dict:
+    """Select gear assembly transforms based on the robot type."""
+    if RobotType(robot_type) is RobotType.UR:
+        return ur_gear_assembly_transforms_dict
+    return flexiv_gear_assembly_transforms_dict
+
 
 # Dictionary containing the calibration of various camera setups.
 # Every item of the dictionary represents the calibration of a single setup
@@ -125,6 +159,38 @@ calibrations_dict = {
             'parent_frame': 'world',
             'child_frame': 'target2_frame',
             'translation': [-0.7, -0.3, 0.4],
+            'rotation': [1.0, 0.0, 0.0, 0.0],  # [qx, qy ,qz, qw]
+        },
+    },
+    'flexiv_test_bench': {
+        'world_pose_realsense_1': {
+            'parent_frame': 'world',
+            'child_frame': 'camera_1_link',
+            'translation': [0.931374, -0.246224, 0.290686],
+            'rotation': [-0.188498, 0.035703, 0.978276, 0.078546],  # [qx, qy, qz, qw]
+        },
+        'world_pose_base_link': {
+            'parent_frame': 'world',
+            'child_frame': 'base_link',
+            'translation': [0.0, 0.0, 0.0],
+            'rotation': [0.0, 0.0, 0.0, 1.0],  # [qx, qy ,qz, qw]
+        },
+        'object_pose_grasp_frame': {
+            'parent_frame': 'detected_object1',
+            'child_frame': 'goal_frame',
+            'translation': [0.043, 0.359, 0.065],
+            'rotation': [0.553, 0.475, -0.454, 0.513],  # [qx, qy ,qz, qw]
+        },
+        'world_pose_target_frame_1': {
+            'parent_frame': 'world',
+            'child_frame': 'target1_frame',
+            'translation': [0.5, -0.15, 0.4],
+            'rotation': [1.0, 0.0, 0.0, 0.0],  # [qx, qy ,qz, qw]
+        },
+        'world_pose_target_frame_2': {
+            'parent_frame': 'world',
+            'child_frame': 'target2_frame',
+            'translation': [0.5, -0.3, 0.4],
             'rotation': [1.0, 0.0, 0.0, 0.0],  # [qx, qy ,qz, qw]
         },
     },
@@ -269,16 +335,17 @@ def add_static_transforms(args: lu.ArgumentContainer) -> List[Action]:
         ]
 
     actions = []
+    gear_assembly_transforms = get_gear_assembly_transforms(str(args.robot_type))
     if camera_type is CameraType.ISAAC_SIM:
         actions.append(
             static_transform_from_dict(
-                gear_assembly_transforms_dict['gear_assembly_pose_gear_shaft_small_frame']))
+                gear_assembly_transforms['gear_assembly_pose_gear_shaft_small_frame']))
         actions.append(
             static_transform_from_dict(
-                gear_assembly_transforms_dict['gear_assembly_pose_gear_shaft_medium_frame']))
+                gear_assembly_transforms['gear_assembly_pose_gear_shaft_medium_frame']))
         actions.append(
             static_transform_from_dict(
-                gear_assembly_transforms_dict['gear_assembly_pose_gear_shaft_large_frame']))
+                gear_assembly_transforms['gear_assembly_pose_gear_shaft_large_frame']))
         return actions
 
     transforms = calibrations_dict[args.calibration_name]
@@ -302,13 +369,13 @@ def add_static_transforms(args: lu.ArgumentContainer) -> List[Action]:
     elif tracking_type is TrackingType.GEAR_ASSEMBLY:
         actions.append(
             static_transform_from_dict(
-                gear_assembly_transforms_dict['gear_assembly_pose_gear_shaft_small_frame']))
+                gear_assembly_transforms['gear_assembly_pose_gear_shaft_small_frame']))
         actions.append(
             static_transform_from_dict(
-                gear_assembly_transforms_dict['gear_assembly_pose_gear_shaft_medium_frame']))
+                gear_assembly_transforms['gear_assembly_pose_gear_shaft_medium_frame']))
         actions.append(
             static_transform_from_dict(
-                gear_assembly_transforms_dict['gear_assembly_pose_gear_shaft_large_frame']))
+                gear_assembly_transforms['gear_assembly_pose_gear_shaft_large_frame']))
     elif tracking_type is TrackingType.POSE_TO_POSE:
         actions.append(static_transform_from_dict(transforms['world_pose_target_frame_1']))
         actions.append(static_transform_from_dict(transforms['world_pose_target_frame_2']))
@@ -331,6 +398,8 @@ def generate_launch_description() -> LaunchDescription:
     args.add_arg('camera_type')
     args.add_arg('tracking_type')
     args.add_arg('calibration_name', '')
+    args.add_arg('gripper_type', 'robotiq_2f_140')
+    args.add_arg('robot_type', 'UR')
 
     args.add_opaque_function(add_static_transforms)
     return LaunchDescription(args.get_launch_actions())

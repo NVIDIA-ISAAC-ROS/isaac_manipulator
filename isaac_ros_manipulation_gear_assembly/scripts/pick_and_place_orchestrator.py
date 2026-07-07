@@ -60,6 +60,16 @@ class PickAndPlaceOrchestrator(Node):
         # Declare parameters
         self.declare_parameter('gripper_collision_links', [''])
         self.declare_parameter('gripper_action_name', '/robotiq_gripper_controller/gripper_cmd')
+        self.declare_parameter('gripper_open_position', 0.0)
+        self.declare_parameter('gripper_close_position', 0.65)
+        self.declare_parameter('gripper_settle_time_sec', 0.0)
+        self.declare_parameter('base_frame', 'base_link')
+        self.declare_parameter('gripper_frame', 'gripper_frame')
+        self.declare_parameter('grasp_frame', 'grasp_frame')
+        self.declare_parameter('joint_names', [
+            'shoulder_pan_joint', 'shoulder_lift_joint', 'elbow_joint',
+            'wrist_1_joint', 'wrist_2_joint', 'wrist_3_joint',
+        ])
         self.declare_parameter('time_dilation_factor', 0.2)
         self.declare_parameter('use_ground_truth_pose_from_sim', False)
         self.declare_parameter('publish_grasp_frame', False)
@@ -77,7 +87,7 @@ class PickAndPlaceOrchestrator(Node):
         self.declare_parameter('joint_limits_file_path',
                                os.path.join(
                                    get_package_share_directory(
-                                       'isaac_ros_manipulation_robot_description'),
+                                       'isaac_ros_manipulation_ur_robot_description'),
                                    'config/joint_limits.yaml'))
 
         # Add parameters for home pose
@@ -97,7 +107,7 @@ class PickAndPlaceOrchestrator(Node):
         # RViz via the interactive marker and place pose in the action request is ignored.
         self.declare_parameter('use_pose_from_rviz', False)
         # The mesh resource URI for the end effector
-        mesh_uri = 'package://isaac_ros_manipulation_robot_description/meshes/robotiq_2f_85.obj'
+        mesh_uri = 'package://isaac_ros_manipulation_ur_robot_description/meshes/robotiq_2f_85.obj'
         self.declare_parameter('end_effector_mesh_resource_uri', mesh_uri)
 
         # Extract the parameters
@@ -125,6 +135,15 @@ class PickAndPlaceOrchestrator(Node):
         )
         gripper_action_name = (
             self.get_parameter('gripper_action_name').get_parameter_value().string_value
+        )
+        self._gripper_open_position = (
+            self.get_parameter('gripper_open_position').get_parameter_value().double_value
+        )
+        self._gripper_close_position = (
+            self.get_parameter('gripper_close_position').get_parameter_value().double_value
+        )
+        self._gripper_settle_time_sec = (
+            self.get_parameter('gripper_settle_time_sec').get_parameter_value().double_value
         )
         self._grasp_file_path = self.get_parameter(
             'grasp_file_path').get_parameter_value().string_value
@@ -157,9 +176,24 @@ class PickAndPlaceOrchestrator(Node):
             self.get_logger().error('Received object scale length other than 3!')
             raise ValueError('Excepted object scale to be length 3!')
 
+        self._base_frame = self.get_parameter(
+            'base_frame').get_parameter_value().string_value
+        self._gripper_frame = self.get_parameter(
+            'gripper_frame').get_parameter_value().string_value
+        self._grasp_frame = self.get_parameter(
+            'grasp_frame').get_parameter_value().string_value
+        self._joint_names = list(self.get_parameter(
+            'joint_names').get_parameter_value().string_array_value)
+
         self._seed_state_for_ik_solver_for_joint_space_planner = self.get_parameter(
             'seed_state_for_ik_solver_for_joint_space_planner'
         ).get_parameter_value().double_array_value
+        if len(self._seed_state_for_ik_solver_for_joint_space_planner) != \
+                len(self._joint_names):
+            raise ValueError(
+                f'seed_state_for_ik_solver_for_joint_space_planner has '
+                f'{len(self._seed_state_for_ik_solver_for_joint_space_planner)}'
+                f' values but robot has {len(self._joint_names)} joints.')
 
         self._attach_object_scale = Vector3()
         self._attach_object_scale.x = attach_object_scale_list[0]
@@ -219,14 +253,25 @@ class PickAndPlaceOrchestrator(Node):
 
         if self._use_pose_from_rviz:
             future = self._tf_buffer.wait_for_transform_async(
-                'base_link', 'gripper_frame', rclpy.time.Time())
+                self._base_frame, self._gripper_frame, rclpy.time.Time())
             future.add_done_callback(self.initialize_marker)
 
         self._joint_limits = {}
         self._joint_limits_file_path = self.get_parameter(
             'joint_limits_file_path').get_parameter_value().string_value
         with open(self._joint_limits_file_path, 'r') as file:
-            self._joint_limits = yaml.safe_load(file)
+            raw_limits = yaml.safe_load(file)
+
+        # Map joint limit keys to the actual prefixed joint names used by this
+        # robot so that limits like "joint1" match "Rizon4s-062839_joint1".
+        raw_joint_limits = raw_limits.get('joint_limits', {})
+        resolved_limits = {}
+        for jname in self._joint_names:
+            for limit_key, limit_val in raw_joint_limits.items():
+                if jname == limit_key or jname.endswith(f'_{limit_key}'):
+                    resolved_limits[jname] = limit_val
+                    break
+        self._joint_limits = {'joint_limits': resolved_limits}
 
         self.get_logger().info('Pick and Place Orchestrator has been started.')
 
@@ -243,7 +288,7 @@ class PickAndPlaceOrchestrator(Node):
 
         if (future.done()):
             transform = self._tf_buffer.lookup_transform(
-                'base_link', 'gripper_frame', rclpy.time.Time())
+                self._base_frame, self._gripper_frame, rclpy.time.Time())
             initial_pose = Pose()
             initial_pose.position.x = transform.transform.translation.x
             initial_pose.position.y = transform.transform.translation.y
@@ -336,7 +381,7 @@ class PickAndPlaceOrchestrator(Node):
         try:
             # Get the grasp pose
             grasp_poses = self._grasp_reader.get_pose_for_pick_task(
-                world_frame='base_link',
+                world_frame=self._base_frame,
                 object_frame_name=self._object_frame_name,
                 tf_buffer=self._tf_buffer,
             )
@@ -345,7 +390,7 @@ class PickAndPlaceOrchestrator(Node):
                 if self._publish_grasp_frame:
                     self.publish_grasp_transform(grasp_pose, f'grasp_frame_{i}')
                 pose = Pose()
-                poses_arr.header.frame_id = 'base_link'
+                poses_arr.header.frame_id = self._base_frame
                 pose.position.x = grasp_pose.position.x
                 pose.position.y = grasp_pose.position.y
                 pose.position.z = grasp_pose.position.z
@@ -394,7 +439,7 @@ class PickAndPlaceOrchestrator(Node):
             action_client=self.planner_action_client,
             logger=self.get_logger(),
             goal_poses=goal_pose_array,
-            link_name='base_link',
+            link_name=self._base_frame,
             grasp_approach_offset_distance=list(self._grasp_approach_offset_distance),
             grasp_approach_path_constraint=grasp_approach_path_constraints,
             retract_offset_distance=list(self._retract_offset_distance),
@@ -423,10 +468,7 @@ class PickAndPlaceOrchestrator(Node):
         joint_state.position = joint_positions
         joint_state.velocity = [0.0] * len(joint_positions)
         joint_state.effort = [0.0] * len(joint_positions)
-        joint_state.name = [
-            'shoulder_pan_joint', 'shoulder_lift_joint', 'elbow_joint',
-            'wrist_1_joint', 'wrist_2_joint', 'wrist_3_joint'
-        ]
+        joint_state.name = list(self._joint_names)
         return joint_state
 
     def get_ik_solutions(self, pose: Pose):
@@ -436,8 +478,8 @@ class PickAndPlaceOrchestrator(Node):
         goal.object_shape = self._attach_object_shape.value
         goal.object_scale = self._attach_object_scale
         goal.enable_aabb_clearing = True
-        goal.world_frame = 'base_link'
-        goal.object_frame = 'grasp_frame'
+        goal.world_frame = self._base_frame
+        goal.object_frame = self._grasp_frame
         goal.object_esdf_clearing_padding = [0.05, 0.05, 0.05]
         goal.num_solutions_to_return = 16
         goal.goal_pose = pose
@@ -605,7 +647,7 @@ class PickAndPlaceOrchestrator(Node):
             action_client=self.planner_action_client,
             logger=self.get_logger(),
             goal_pose=pose,
-            link_name='base_link',
+            link_name=self._base_frame,
             time_dilation_factor=self._time_dilation_factor,
             update_planning_scene=True,
             planning_scene_world=self._planning_scene_world,
@@ -727,7 +769,10 @@ class PickAndPlaceOrchestrator(Node):
         """
         marker = Marker()
         gripper_pose_object = self._grasp_reader.get_grasp_pose_object(
-            index=self.plan_result.goal_index, tf_buffer=self._tf_buffer)
+            index=self.plan_result.goal_index,
+            gripper_frame=self._gripper_frame,
+            grasp_frame=self._grasp_frame,
+            tf_buffer=self._tf_buffer)
 
         pose = Pose()
         pose.position.x = gripper_pose_object.position.x
@@ -750,7 +795,7 @@ class PickAndPlaceOrchestrator(Node):
         else:
             self.get_logger().error('Received unknown object type!')
 
-        marker.header.frame_id = 'grasp_frame'
+        marker.header.frame_id = self._grasp_frame
         marker.frame_locked = True
         marker.color.r = 1.0
         marker.color.a = 1.0
@@ -891,13 +936,13 @@ class PickAndPlaceOrchestrator(Node):
 
         self._gripper_done_event.set()
 
-    def close_gripper(self, position: float = 0.65, max_effort: float = 10.0) -> bool:
+    def close_gripper(self, position: float = None, max_effort: float = 10.0) -> bool:
         """
         Close gripper by triggering an action call.
 
         Args
         ----
-            position (float, optional): Position. Defaults to 0.65.
+            position (float, optional): Position. Defaults to gripper_close_position param.
             max_effort (float, optional): Max effort. Defaults to 10.0.
 
         Returns
@@ -905,6 +950,8 @@ class PickAndPlaceOrchestrator(Node):
             bool: bool: Status of whether gripper closed successfully or not
 
         """
+        if position is None:
+            position = self._gripper_close_position
         self.get_logger().info('Closing gripper')
         self.trigger_gripper(position, max_effort)
 
@@ -913,15 +960,20 @@ class PickAndPlaceOrchestrator(Node):
             self.get_logger().error('Failed to close the gripper.')
             return False
 
+        if self._gripper_settle_time_sec > 0:
+            self.get_logger().info(
+                f'Waiting {self._gripper_settle_time_sec}s for gripper to settle')
+            time.sleep(self._gripper_settle_time_sec)
+
         return True
 
-    def open_gripper(self, position: float = 0.0, max_effort: float = 10.0) -> bool:
+    def open_gripper(self, position: float = None, max_effort: float = 10.0) -> bool:
         """
         Open gripper by triggering an action call.
 
         Args
         ----
-            position (float, optional): Position. Defaults to 0.65.
+            position (float, optional): Position. Defaults to gripper_open_position param.
             max_effort (float, optional): Max effort. Defaults to 10.0.
 
         Returns
@@ -929,6 +981,8 @@ class PickAndPlaceOrchestrator(Node):
             bool: bool: Status of whether gripper opened successfully or not
 
         """
+        if position is None:
+            position = self._gripper_open_position
         self.get_logger().info('Opening gripper')
         self.trigger_gripper(position, max_effort)
 
@@ -936,6 +990,11 @@ class PickAndPlaceOrchestrator(Node):
         if not self._gripper_done_result:
             self.get_logger().error('Failed to open the gripper.')
             return False
+
+        if self._gripper_settle_time_sec > 0:
+            self.get_logger().info(
+                f'Waiting {self._gripper_settle_time_sec}s for gripper to settle')
+            time.sleep(self._gripper_settle_time_sec)
 
         return True
 

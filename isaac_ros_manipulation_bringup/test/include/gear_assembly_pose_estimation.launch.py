@@ -34,6 +34,10 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import ComposableNodeContainer, Node
 
+ISAAC_ROS_WS = os.getenv('ISAAC_ROS_WS')
+if ISAAC_ROS_WS is None:
+    raise ValueError('ISAAC_ROS_WS env variable is not set')
+
 
 def launch_setup(context: LaunchContext, *args, **kwargs) -> List[Node]:
     launch_dir = os.path.join(
@@ -51,6 +55,9 @@ def launch_setup(context: LaunchContext, *args, **kwargs) -> List[Node]:
     image_height = LaunchConfiguration('image_height')
     frequency = LaunchConfiguration('frequency')
     calibration_name = LaunchConfiguration('calibration_name')
+    world_frame = LaunchConfiguration('world_frame')
+    enable_goal_pose_publisher = context.perform_substitution(
+        LaunchConfiguration('enable_goal_pose_publisher')).lower() in ('true', '1', 'yes')
 
     nodes = []
 
@@ -134,20 +141,21 @@ def launch_setup(context: LaunchContext, *args, **kwargs) -> List[Node]:
         )
     )
 
-    nodes.append(
-        Node(
-            name='goal_pose_publisher_node',
-            package='isaac_ros_manipulation_ur_dnn_policy',
-            executable='goal_pose_publisher_node.py',
-            parameters=[{
-                'world_frame': 'base',
-                'goal_frame': goal_frame,
-                'frequency': frequency,
-            }],
-            output='both',
-            on_exit=Shutdown(),
+    if enable_goal_pose_publisher:
+        nodes.append(
+            Node(
+                name='goal_pose_publisher_node',
+                package='isaac_ros_manipulation_dnn_policy',
+                executable='goal_pose_publisher_node.py',
+                parameters=[{
+                    'world_frame': world_frame,
+                    'goal_frame': goal_frame,
+                    'frequency': frequency,
+                }],
+                output='both',
+                on_exit=Shutdown(),
+            )
         )
-    )
 
     return nodes
 
@@ -156,13 +164,14 @@ def generate_launch_description():
     launch_args = [
         DeclareLaunchArgument(
             'goal_frame',
+            default_value='gear_shaft_large',
             description='Frame of the goal pose to be published',
             choices=['gear_shaft_small', 'gear_shaft_medium', 'gear_shaft_large'],
         ),
         DeclareLaunchArgument(
             'mesh_file_path',
-            default_value='isaac_ros_assets/isaac_ros_manipulation_ur_dnn_policy/'
-                          'gear_base/gear_base.obj',
+            default_value=f'{ISAAC_ROS_WS}/isaac_ros_assets/'
+                          f'isaac_ros_manipulation_dnn_policy/gear_base/gear_base.obj',
             description='File path to the mesh file',
         ),
         DeclareLaunchArgument(
@@ -172,27 +181,31 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'sam_model_repository_paths',
-            default_value='["isaac_ros_assets/models"]',
+            default_value=f'["{ISAAC_ROS_WS}/isaac_ros_assets/models/triton"]',
             description='File path to the repository of SAM models',
         ),
         DeclareLaunchArgument(
             'refine_model_file_path',
-            default_value='isaac_ros_assets/models/foundationpose/refine_model.onnx',
+            default_value=f'{ISAAC_ROS_WS}/isaac_ros_assets/models/foundationpose/'
+                          f'refine_model.onnx',
             description='File path to the FoundationPose refine model',
         ),
         DeclareLaunchArgument(
             'refine_engine_file_path',
-            default_value='isaac_ros_assets/models/foundationpose/refine_trt_engine.plan',
+            default_value=f'{ISAAC_ROS_WS}/isaac_ros_assets/models/foundationpose/'
+                          f'refine_trt_engine.plan',
             description='File path to the FoundationPose refine trt engine',
         ),
         DeclareLaunchArgument(
             'score_model_file_path',
-            default_value='isaac_ros_assets/models/foundationpose/score_model.onnx',
+            default_value=f'{ISAAC_ROS_WS}/isaac_ros_assets/models/foundationpose/'
+                          f'score_model.onnx',
             description='File path to the FoundationPose score model',
         ),
         DeclareLaunchArgument(
             'score_engine_file_path',
-            default_value='isaac_ros_assets/models/foundationpose/score_trt_engine.plan',
+            default_value=f'{ISAAC_ROS_WS}/isaac_ros_assets/models/foundationpose/'
+                          f'score_trt_engine.plan',
             description='File path to the FoundationPose score trt engine',
         ),
         DeclareLaunchArgument(
@@ -213,6 +226,18 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'calibration_name',
             description='Name of the calibration setup (eg: hubble_ur10e_test_bench)',
+        ),
+        DeclareLaunchArgument(
+            'world_frame',
+            default_value='base',
+            description='World/robot base frame for TF lookups '
+            '(e.g. base for UR, world for Flexiv)',
+        ),
+        DeclareLaunchArgument(
+            'enable_goal_pose_publisher',
+            default_value='True',
+            description='Enable the goal pose publisher node. Set to False when using an '
+                        'external goal pose publisher (e.g. from inference_flexiv_gear_insertion)',
         ),
     ]
     return LaunchDescription(launch_args + [OpaqueFunction(function=launch_setup)])

@@ -75,8 +75,10 @@ def generate_test_description():
 
         test_nodes.append(IncludeLaunchDescription(
            PythonLaunchDescriptionSource(
-               [isaac_ros_manipulation_workflow_bringup_include_dir,
-                   '/drivers/ur_robotiq_driver.launch.py']),
+               [os.path.join(
+                   get_package_share_directory('isaac_ros_manipulation_ur_driver_utils'),
+                   'launch'),
+                '/ur_robotiq_driver.launch.py']),
            launch_arguments={key: str(value) for key, value in params.items()}.items()))
 
         test_nodes.append(IncludeLaunchDescription(

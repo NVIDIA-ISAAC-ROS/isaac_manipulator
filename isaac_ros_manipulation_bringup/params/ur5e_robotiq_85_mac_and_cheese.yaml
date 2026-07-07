@@ -1,6 +1,10 @@
 camera_type: REALSENSE
 num_cameras: 1
 workflow_type: PICK_AND_PLACE
+robot_type: UR
+
+# Robot driver launch file
+robot_launch_file_path: $(ros2 pkg prefix --share isaac_ros_manipulation_ur_driver_utils)/launch/ur_robotiq_driver.launch.py
 
 ur_type: ur5e
 gripper_type: robotiq_2f_85
@@ -13,8 +17,8 @@ log_level: error
 moveit_collision_objects_scene_file: '$(ros2 pkg prefix --share isaac_ros_manipulation_bringup)/config/scene_objects/hubble_ur5e_test_bench/hubble_ur5e_test_scene_objects.scene'
 
 # Robot description params
-urdf_path: $(ros2 pkg prefix --share isaac_ros_manipulation_robot_description)/urdf/ur_robotiq_gripper.urdf.xacro
-# Relative path to the isaac_ros_manipulation_robot_description package, note this is important
+urdf_path: $(ros2 pkg prefix --share isaac_ros_manipulation_ur_robot_description)/urdf/ur_robotiq_gripper.urdf.xacro
+# Relative path to the isaac_ros_manipulation_ur_robot_description package, note this is important
 srdf_path: srdf/ur_robotiq_2f_85_gripper.srdf.xacro
 joint_limits_file_path: config/joint_limits.yaml
 kinematics_file_path: config/kinematics.yaml
@@ -29,6 +33,7 @@ ur_calibration_file_path: ''
 # cuMotion-specific params
 cumotion_urdf_file_path: $(ros2 pkg prefix --share isaac_ros_cumotion_robot_description)/urdf/ur5e_robotiq_2f_85.urdf
 cumotion_xrdf_file_path: $(ros2 pkg prefix --share isaac_ros_cumotion_robot_description)/xrdf/ur5e_robotiq_2f_85.xrdf
+cumotion_joint_states_topic: /joint_states
 distance_threshold: 0.05
 # Enable/disable nvblox for 3D scene reconstruction and dynamic collision avoidance
 enable_nvblox: 'true'
@@ -51,7 +56,7 @@ segmentation_type: NONE  # Can be SEGMENT_ANYTHING, SEGMENT_ANYTHING2, or NONE
 segment_anything_input_points_topic: input_points
 segment_anything_input_detections_topic: input_detections
 segment_anything_enable_debug_output: 'false'
-sam_model_repository_paths: ['${ISAAC_ROS_WS}/isaac_ros_assets/models']
+sam_model_repository_paths: ['${ISAAC_ROS_WS}/isaac_ros_assets/models/triton']
 ess_full_engine_file_path: ${ISAAC_ROS_WS}/isaac_ros_assets/models/dnn_stereo_disparity/dnn_stereo_disparity_v4.1.0_onnx_trt10.13/ess.engine
 ess_light_engine_file_path: ${ISAAC_ROS_WS}/isaac_ros_assets/models/dnn_stereo_disparity/dnn_stereo_disparity_v4.1.0_onnx_trt10.13/light_ess.engine
 foundationstereo_low_res_engine_file_path: ${ISAAC_ROS_WS}/isaac_ros_assets/models/foundationstereo/deployable_foundation_stereo_small_v1.0/foundationstereo_320x736.engine
@@ -84,7 +89,7 @@ use_ground_truth_pose_in_sim: 'false'
 pick_and_place_planner_retries: 5
 pick_and_place_retry_wait_time: 5.0
 sim_gt_asset_frame_id: 'mac_and_cheese'  # Make sure you add mac and cheese to the Sim scene
-grasps_file_path: $(ros2 pkg prefix --share isaac_ros_manipulation_robot_description)/config/robotiq_2f_85_grasps_mac_and_cheese.yaml
+grasps_file_path: $(ros2 pkg prefix --share isaac_ros_manipulation_ur_robot_description)/config/robotiq_2f_85_grasps_mac_and_cheese.yaml
 time_dilation_factor: '0.6' # This parameter is used to control the speed of the robot
 
 # For pick and place automated testing
@@ -95,7 +100,7 @@ home_pose: [-0.25, 0.2, 0.4, 0.034, 0.996, 0.066, 0.042]
 object_attachment_type: CUSTOM_MESH
 object_attachment_scale: [0.09, 0.185, 0.035]
 attach_object_mesh_file_path: ${ISAAC_ROS_WS}/isaac_ros_assets/isaac_ros_foundationpose/Mac_and_cheese_0_1/Mac_and_cheese_0_1.obj
-end_effector_mesh_resource_uri: package://isaac_ros_manipulation_robot_description/meshes/robotiq_2f_85.obj
+end_effector_mesh_resource_uri: package://isaac_ros_manipulation_ur_robot_description/meshes/robotiq_2f_85.obj
 
 # Visualization
 enable_rviz_visualization: 'false'

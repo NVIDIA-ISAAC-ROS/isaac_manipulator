@@ -27,6 +27,8 @@ def launch_setup(context, *args, **kwargs):
         LaunchConfiguration('print_ascii_tree'))).lower() == 'true'
     manual_mode = str(context.perform_substitution(
         LaunchConfiguration('manual_mode'))).lower() == 'true'
+    frame_prefix = str(context.perform_substitution(
+        LaunchConfiguration('frame_prefix')))
 
     cmd_args = [
         'ros2', 'run', 'isaac_ros_manipulation_pick_and_place', 'multi_object_pick_and_place',
@@ -39,6 +41,7 @@ def launch_setup(context, *args, **kwargs):
         cmd_args.append('--print-ascii-tree')
     if manual_mode:
         cmd_args.append('--manual-mode')
+    cmd_args.extend(['--frame_prefix', frame_prefix])
 
     headless = str(context.perform_substitution(
         LaunchConfiguration('headless'))).lower() == 'true'
@@ -86,6 +89,12 @@ def generate_launch_description():
             'headless',
             default_value='false',
             description='Run in headless mode without GUI elements like xterm',
+        ),
+        DeclareLaunchArgument(
+            'frame_prefix',
+            default_value='',
+            description=('TF prefix from the bringup config (e.g. '
+                         '"Rizon4s-062840_"); empty for bare frame names.'),
         ),
     ]
 

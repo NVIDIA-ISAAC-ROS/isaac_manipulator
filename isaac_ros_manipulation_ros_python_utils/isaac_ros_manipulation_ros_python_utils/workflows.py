@@ -24,9 +24,6 @@ from isaac_ros_manipulation_ros_python_utils.config import (
     GearAssemblyConfig, ObjectFollowingConfig, OrchestrationConfig,
     PoseToPoseConfig, WorkflowType
 )
-from isaac_ros_manipulation_ros_python_utils.robot_description_utils import (
-    get_gripper_collision_links
-)
 
 from launch.actions import (
     ExecuteProcess, IncludeLaunchDescription, Shutdown
@@ -55,9 +52,10 @@ def get_pick_and_place_orchestrator(workflow_config: GearAssemblyConfig) -> List
         object_frame_name = workflow_config.sim_gt_asset_frame_id
     else:
         object_frame_name = 'detected_object1'
-    joint_states_topic = '/isaac_joint_states' if workflow_config.use_sim_time else '/joint_states'
-    # We only support 2F-140 in Isaac Sim for this release
-    gripper_collision_links = get_gripper_collision_links(workflow_config.gripper_type)
+    joint_states_topic = '/joint_states'
+    # Robot- and gripper-specific values live on ``driver_config``; workflow-level
+    # knobs (retries, scales, attachments, etc.) stay on ``workflow_config``.
+    driver_config = workflow_config.driver_config
     pick_and_place_orchestrator_node = Node(
         package='isaac_ros_manipulation_gear_assembly',
         executable='pick_and_place_orchestrator.py',
@@ -73,7 +71,7 @@ def get_pick_and_place_orchestrator(workflow_config: GearAssemblyConfig) -> List
             'sleep_time_before_planner_tries_sec': workflow_config.pick_and_place_retry_wait_time,
             'num_planner_tries': workflow_config.pick_and_place_planner_retries,
             'publish_grasp_frame': True,
-            'gripper_collision_links': gripper_collision_links,
+            'gripper_collision_links': driver_config.gripper_collision_links,
             'attach_object_shape': workflow_config.object_attachment_type.value,
             'attach_object_scale': workflow_config.object_attachment_scale,
             'attach_object_mesh_file_path': workflow_config.attach_object_mesh_file_path,
@@ -86,6 +84,15 @@ def get_pick_and_place_orchestrator(workflow_config: GearAssemblyConfig) -> List
             'home_pose': workflow_config.home_pose,
             'seed_state_for_ik_solver_for_joint_space_planner':
                 workflow_config.seed_state_for_ik_solver_for_joint_space_planner,
+            'base_frame': driver_config.base_frame,
+            'gripper_frame': driver_config.gripper_frame,
+            'grasp_frame': driver_config.grasp_frame,
+            'gripper_action_name': driver_config.gripper_action_name,
+            'gripper_open_position': driver_config.gripper_open_position,
+            'gripper_close_position': driver_config.gripper_close_position,
+            'gripper_settle_time_sec': driver_config.gripper_settle_time_sec,
+            'joint_names': driver_config.joint_names,
+            'joint_limits_file_path': driver_config.joint_limits_file_path,
         }],
         output='screen',
         on_exit=Shutdown(),
@@ -194,6 +201,8 @@ def get_multi_object_pick_and_place(
             'manual_mode': orchestration_config.manual_mode,
             'log_level': orchestration_config.log_level,
             'headless': str(orchestration_config.headless),
+            # From bringup `robot_sn` / `tf_prefix`; empty when unused.
+            'frame_prefix': orchestration_config.frame_prefix,
         }.items(),
     )
     return [multi_object_pick_and_place_process]

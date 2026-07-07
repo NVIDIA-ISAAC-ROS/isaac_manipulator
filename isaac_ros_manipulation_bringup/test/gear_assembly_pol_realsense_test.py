@@ -72,21 +72,20 @@ def generate_test_description():
         'camera_type': 'REALSENSE',
         'num_cameras': 1,
         'foundation_pose_mesh_file_path': (
-            f'{ISAAC_ROS_ASSETS_DIR}/isaac_ros_manipulation_ur_dnn_policy'
+            f'{ISAAC_ROS_ASSETS_DIR}/isaac_ros_manipulation_dnn_policy'
             '/gear_large/gear_large.obj'),
         'attach_object_mesh_file_path': (
-            f'{ISAAC_ROS_ASSETS_DIR}/isaac_ros_manipulation_ur_dnn_policy'
+            f'{ISAAC_ROS_ASSETS_DIR}/isaac_ros_manipulation_dnn_policy'
             '/gear_large/gear_large.obj'),
-        'peg_stand_file_path': f'{ISAAC_ROS_ASSETS_DIR}/isaac_ros_manipulation_ur_dnn_policy'
-                               '/gear_base/gear_base.obj',
-        'headless': 'true'
+        'peg_stand_file_path': f'{ISAAC_ROS_ASSETS_DIR}/isaac_ros_manipulation_dnn_policy'
+                               '/gear_base/gear_base.obj'
     }
     params.update(override_params)
 
     gear_mesh_file_paths = [
-        f'{ISAAC_ROS_ASSETS_DIR}/isaac_ros_manipulation_ur_dnn_policy/gear_large/gear_large.obj',
-        f'{ISAAC_ROS_ASSETS_DIR}/isaac_ros_manipulation_ur_dnn_policy/gear_small/gear_small.obj',
-        f'{ISAAC_ROS_ASSETS_DIR}/isaac_ros_manipulation_ur_dnn_policy/gear_medium/gear_medium.obj',
+        f'{ISAAC_ROS_ASSETS_DIR}/isaac_ros_manipulation_dnn_policy/gear_large/gear_large.obj',
+        f'{ISAAC_ROS_ASSETS_DIR}/isaac_ros_manipulation_dnn_policy/gear_small/gear_small.obj',
+        f'{ISAAC_ROS_ASSETS_DIR}/isaac_ros_manipulation_dnn_policy/gear_medium/gear_medium.obj',
     ]
 
     # This is the IK position that cuMotion to try to match closely in planning for place pose.
@@ -111,8 +110,10 @@ def generate_test_description():
             launch_arguments={key: str(value) for key, value in params.items()}.items()))
         test_nodes.append(IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
-                [isaac_ros_manipulation_workflow_bringup_include_dir,
-                    '/drivers/ur_robotiq_driver.launch.py']),
+                [os.path.join(
+                    get_package_share_directory('isaac_ros_manipulation_ur_driver_utils'),
+                    'launch'),
+                 '/ur_robotiq_driver.launch.py']),
             launch_arguments={key: str(value) for key, value in params.items()}.items()))
         test_nodes.append(IncludeLaunchDescription(
             PythonLaunchDescriptionSource(

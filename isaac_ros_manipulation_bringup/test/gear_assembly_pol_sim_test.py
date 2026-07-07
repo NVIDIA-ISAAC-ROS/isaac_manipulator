@@ -58,8 +58,8 @@ def generate_test_description():
     isaac_ros_manipulation_workflow_bringup_include_dir = os.path.join(
         get_package_share_directory('isaac_ros_manipulation_bringup'),
         'launch')
-    isaac_ros_manipulation_robot_description_include_dir = os.path.join(
-        get_package_share_directory('isaac_ros_manipulation_robot_description'),
+    isaac_ros_manipulation_ur_robot_description_include_dir = os.path.join(
+        get_package_share_directory('isaac_ros_manipulation_ur_robot_description'),
         'config')
     test_yaml_config = os.path.join(
         get_package_share_directory('isaac_ros_manipulation_bringup'),
@@ -78,19 +78,16 @@ def generate_test_description():
         'segment_anything_input_detections_topic': 'input_detections',
         'workflow_type': 'GEAR_ASSEMBLY',
         # Update grasp file path for the large gear.
-        # TODO(kchahal): Add a mechanism to update the grasps inside of behavior tree for
-        # differentobjects.
-        'grasps_file_path': f'{isaac_ros_manipulation_robot_description_include_dir}/'
+        'grasps_file_path': f'{isaac_ros_manipulation_ur_robot_description_include_dir}/'
                             'robotiq_2f_140_grasps_large_gear.yaml',
-        # TODO(kchahal): Add real paths once the location is finalized.
         'foundation_pose_mesh_file_path': f'{ISAAC_ROS_ASSETS_DIR}/'
-                                          'isaac_ros_manipulation_ur_dnn_policy'
+                                          'isaac_ros_manipulation_dnn_policy'
                                           '/gear_large/gear_large.obj',
         'attach_object_mesh_file_path': f'{ISAAC_ROS_ASSETS_DIR}/'
-                                        'isaac_ros_manipulation_ur_dnn_policy'
+                                        'isaac_ros_manipulation_dnn_policy'
                                         '/gear_large/gear_large.obj',
         'peg_stand_file_path': f'{ISAAC_ROS_ASSETS_DIR}/'
-                               'isaac_ros_manipulation_ur_dnn_policy'
+                               'isaac_ros_manipulation_dnn_policy'
                                '/gear_base/gear_base.obj',
         'gear_assembly_ros_bag_path_for_rl_inference': '/tmp/gear_assembly_rl_inference.bag',
         'use_ground_truth_pose_in_sim': 'true',
@@ -99,9 +96,9 @@ def generate_test_description():
     }
 
     gear_mesh_file_paths = [
-        f'{ISAAC_ROS_ASSETS_DIR}/isaac_ros_manipulation_ur_dnn_policy/gear_large/gear_large.obj',
-        f'{ISAAC_ROS_ASSETS_DIR}/isaac_ros_manipulation_ur_dnn_policy/gear_small/gear_small.obj',
-        f'{ISAAC_ROS_ASSETS_DIR}/isaac_ros_manipulation_ur_dnn_policy/gear_medium/gear_medium.obj',
+        f'{ISAAC_ROS_ASSETS_DIR}/isaac_ros_manipulation_dnn_policy/gear_large/gear_large.obj',
+        f'{ISAAC_ROS_ASSETS_DIR}/isaac_ros_manipulation_dnn_policy/gear_small/gear_small.obj',
+        f'{ISAAC_ROS_ASSETS_DIR}/isaac_ros_manipulation_dnn_policy/gear_medium/gear_medium.obj',
     ]
 
     params.update(override_params)
@@ -134,8 +131,10 @@ def generate_test_description():
             launch_arguments={key: str(value) for key, value in params.items()}.items()))
         test_nodes.append(IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
-                [isaac_ros_manipulation_workflow_bringup_include_dir,
-                    '/drivers/ur_robotiq_driver.launch.py']),
+                [os.path.join(
+                    get_package_share_directory('isaac_ros_manipulation_ur_driver_utils'),
+                    'launch'),
+                 '/ur_robotiq_driver.launch.py']),
             launch_arguments={key: str(value) for key, value in params.items()}.items()))
         test_nodes.append(IncludeLaunchDescription(
             PythonLaunchDescriptionSource(

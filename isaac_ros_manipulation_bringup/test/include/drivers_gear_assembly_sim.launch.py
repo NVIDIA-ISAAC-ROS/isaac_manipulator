@@ -18,9 +18,11 @@
 from isaac_ros_launch_utils import GroupAction
 
 from isaac_ros_manipulation_ros_python_utils import (
-    CoreConfig, get_isaac_sim_joint_parser_node, get_moveit_group_node,
-    get_robot_state_publisher,
-    get_visualization_actions, start_tool_communication, UrRobotiqDriverConfig
+    CoreConfig, get_visualization_actions,
+)
+from isaac_ros_manipulation_ur_driver_utils import (
+    get_isaac_sim_joint_parser_node, start_tool_communication,
+    URDriverUtils, UrRobotiqDriverConfig,
 )
 
 from launch import LaunchDescription
@@ -31,6 +33,7 @@ from launch.actions import (
 
 def launch_setup(context, *args, **kwargs):
     driver_config = UrRobotiqDriverConfig(context)
+    ur = URDriverUtils(driver_config)
 
     manipulator_init_nodes = []
     core_config = CoreConfig(context)
@@ -42,8 +45,8 @@ def launch_setup(context, *args, **kwargs):
         manipulator_init_nodes.append(
             start_tool_communication(driver_config.robot_ip)
         )
-    manipulator_init_nodes.append(get_robot_state_publisher(driver_config))
-    _, moveit_config = get_moveit_group_node(driver_config)
+    manipulator_init_nodes.append(ur.get_robot_state_publisher())
+    _, moveit_config = ur.get_moveit_group_node()
     manipulator_init_nodes.extend(
         get_visualization_actions(
             core_config=core_config,
@@ -117,7 +120,13 @@ def generate_launch_description():
             'workflow_type',
             choices=['POSE_TO_POSE', 'PICK_AND_PLACE', 'OBJECT_FOLLOWING', 'GEAR_ASSEMBLY'],
             description='Type of workflow to run the sim based manipulator pipeline on',
-        )
+        ),
+        DeclareLaunchArgument(
+            'robot_type',
+            choices=['UR', 'FLEXIV'],
+            description='Robot family used to drive TF frame prefix and '
+                        'arm joint name derivation in shared launch utilities.',
+        ),
     ]
 
     group_action = GroupAction(

@@ -77,6 +77,9 @@ def get_foundation_pose_nodes(camera_config: CameraConfig,
     object_detection_config.update_server_topic_names(camera_config)
     pose_estimation_config.update_server_topic_names(camera_config)
     enable_dnn_depth_in_realsense = pose_estimation_config.enable_dnn_depth_in_realsense
+    pose_estimation_depth_input_topic = pose_estimation_config.fp_in_depth_topic_name
+    pose_estimation_depth_image_width = pose_estimation_config.fp_in_depth_image_width
+    pose_estimation_depth_image_height = pose_estimation_config.fp_in_depth_image_height
 
     refine_iterations = '3'
     symmetry_axes = '["x_180", "y_180", "z_180"]'
@@ -92,8 +95,8 @@ def get_foundation_pose_nodes(camera_config: CameraConfig,
             'camera_type': str(camera_config.camera_type),
             'rgb_image_width': camera_config.rgb_image_width,
             'rgb_image_height': camera_config.rgb_image_height,
-            'depth_image_width': camera_config.depth_image_width,
-            'depth_image_height': camera_config.depth_image_height,
+            'depth_image_width': pose_estimation_depth_image_width,
+            'depth_image_height': pose_estimation_depth_image_height,
             'rgb_image_topic': pose_estimation_config.foundation_pose_rgb_image_topic,
             'rgb_camera_info_topic': pose_estimation_config.foundation_pose_rgb_camera_info,
             'realsense_depth_image_topic': pose_estimation_config.realsense_depth_image_topic,
@@ -132,11 +135,11 @@ def get_foundation_pose_nodes(camera_config: CameraConfig,
             launch_arguments={
                 'image_width': camera_config.rgb_image_width,
                 'image_height': camera_config.rgb_image_height,
-                'depth_image_width': camera_config.depth_image_width,
-                'depth_image_height': camera_config.depth_image_height,
+                'depth_image_width': pose_estimation_depth_image_width,
+                'depth_image_height': pose_estimation_depth_image_height,
                 # TODO(kchahal):This should ideally come from perception config.
                 'image_input_topic': object_detection_config.rtdetr_camera_input,
-                'depth_topic_name': camera_config.depth_camera_topic_name,
+                'depth_topic_name': pose_estimation_depth_input_topic,
                 'camera_info_input_topic': object_detection_config.rtdetr_camera_info_input,
                 'rtdetr_engine_file_path': object_detection_config.rtdetr_engine_file_path,
                 'rt_detr_confidence_threshold':
@@ -162,9 +165,9 @@ def get_foundation_pose_nodes(camera_config: CameraConfig,
             ),
             launch_arguments={
                 'camera_info_input_topic': object_detection_config.grounding_dino_camera_info_input,
-                'depth_image_height': camera_config.depth_image_height,
-                'depth_image_width': camera_config.depth_image_width,
-                'depth_topic_name': camera_config.depth_camera_topic_name,
+                'depth_image_height': pose_estimation_depth_image_height,
+                'depth_image_width': pose_estimation_depth_image_width,
+                'depth_topic_name': pose_estimation_depth_input_topic,
                 'detection2_d_topic':
                     pose_estimation_config.foundation_pose_detections_topic,
                 'detections_2d_array_output_topic':
@@ -200,7 +203,7 @@ def get_foundation_pose_nodes(camera_config: CameraConfig,
                 'image_height': camera_config.rgb_image_height,
                 'image_input_topic': segmentation_config.sam_main_launch_file_image_topic,
                 # This is not used when PICK_AND_PLACE is ON.
-                'depth_topic_name': camera_config.depth_camera_topic_name,
+                'depth_topic_name': pose_estimation_depth_input_topic,
                 'camera_info_input_topic':
                     segmentation_config.sam_main_launch_file_camera_info_topic,
                 'segment_anything_is_point_triggered': str(segmentation_config.is_point_triggered),
@@ -233,7 +236,7 @@ def get_foundation_pose_nodes(camera_config: CameraConfig,
                 'image_height': camera_config.rgb_image_height,
                 'image_input_topic': segmentation_config.sam2_main_launch_file_image_topic,
                 # This is not used when PICK_AND_PLACE is ON.
-                'depth_topic_name': camera_config.depth_camera_topic_name,
+                'depth_topic_name': pose_estimation_depth_input_topic,
                 'camera_info_input_topic':
                     segmentation_config.sam2_main_launch_file_camera_info_topic,
                 'segment_anything2_is_point_triggered': str(segmentation_config.is_point_triggered),

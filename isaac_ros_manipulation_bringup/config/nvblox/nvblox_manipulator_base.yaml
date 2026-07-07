@@ -43,3 +43,5 @@
 
       # esdf integrator
       esdf_integrator_min_weight: 0.1
+      unobserved_esdf_policy: "free" # "ignore" | "free" | "occupied"
+      add_negative_truncation_band_sites: true

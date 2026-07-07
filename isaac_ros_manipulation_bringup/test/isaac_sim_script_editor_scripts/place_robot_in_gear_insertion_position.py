@@ -19,7 +19,7 @@ Script to place the robot in the gear insertion position in Isaac Sim.
 
 First start Isaac Sim, run this action server in a new terminal:
 
-1. ros2 run isaac_ros_manipulation_isaac_sim_utils isaac_sim_gripper_driver.py
+1. ros2 run isaac_ros_manipulation_ur_isaac_sim_utils isaac_sim_gripper_driver.py
 2. ros2 action send_goal \
         /robotiq_gripper_controller/gripper_cmd \
         control_msgs/action/GripperCommand "command: {position: 0.0, max_effort: 100.0}"

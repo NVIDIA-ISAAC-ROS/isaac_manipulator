@@ -238,6 +238,7 @@ def launch_setup(context, *args, **kwargs):
         plugin='nvidia::isaac_ros::grounding_dino::GroundingDinoPreprocessorNode',
         parameters=[{
             'default_prompt': default_prompt,
+            'input_image_tensor_name': 'images',
             'input_qos': output_qos,
             'output_qos': output_qos,
             'input_qos_depth': 1,

@@ -288,7 +288,7 @@ def get_cumotion_node(
         get_package_share_directory('isaac_ros_manipulation_bringup'), 'launch', 'include'
     )
     use_sim_time_str = 'true' if use_sim_time else 'false'
-    tool_frame = 'gripper_frame'
+    tool_frame = getattr(core_config.workflow_config, 'gripper_frame', 'gripper_frame')
     enable_object_attachment = 'true' if \
         workflow_type in (WorkflowType.PICK_AND_PLACE, WorkflowType.GEAR_ASSEMBLY) else 'false'
     enable_dnn_depth_in_realsense = 'true' if \
@@ -307,8 +307,7 @@ def get_cumotion_node(
             'use_sim_time': use_sim_time_str,
             'tool_frame': tool_frame,
             'camera_type': str(camera_type),
-            'joint_states_topic': '/isaac_joint_states' if use_sim_time else
-                                  '/joint_states',
+            'joint_states_topic': core_config.cumotion_config.cumotion_joint_states_topic,
             'time_sync_slop': time_sync_slop,
             'distance_threshold': str(distance_threshold),
             'time_dilation_factor': str(core_config.workflow_config.time_dilation_factor),

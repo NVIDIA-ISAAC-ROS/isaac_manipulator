@@ -60,8 +60,8 @@ def generate_test_description():
     isaac_ros_manipulation_test_bringup_include_dir = os.path.join(
         get_package_share_directory('isaac_ros_manipulation_bringup'),
         'test', 'include')
-    isaac_ros_manipulation_robot_description_include_dir = os.path.join(
-        get_package_share_directory('isaac_ros_manipulation_robot_description'),
+    isaac_ros_manipulation_ur_robot_description_include_dir = os.path.join(
+        get_package_share_directory('isaac_ros_manipulation_ur_robot_description'),
         'config')
     test_yaml_config = os.path.join(
         get_package_share_directory('isaac_ros_manipulation_bringup'),
@@ -79,9 +79,8 @@ def generate_test_description():
         'segment_anything_input_points_topic': 'input_points',
         'segment_anything_input_detections_topic': 'input_detections',
         'workflow_type': 'GEAR_ASSEMBLY',
-        'grasps_file_path': f'{isaac_ros_manipulation_robot_description_include_dir}/'
+        'grasps_file_path': f'{isaac_ros_manipulation_ur_robot_description_include_dir}/'
                             'robotiq_2f_140_grasps_large_gear.yaml',
-        # TODO(kchahal): Add real paths once the location is finalized.
         'foundation_pose_mesh_file_path': f'{ISAAC_ROS_ASSETS_DIR}/isaac_ros_segment_anything'
                                           '/meshes/gear_large.obj',
         'attach_object_mesh_file_path': f'{ISAAC_ROS_ASSETS_DIR}/isaac_ros_segment_anything'

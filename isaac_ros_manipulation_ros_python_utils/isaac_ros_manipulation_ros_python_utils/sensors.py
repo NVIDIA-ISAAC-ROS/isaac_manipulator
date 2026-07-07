@@ -36,7 +36,9 @@ def get_calibration_parameters(workflow_type: WorkflowType,
                                use_sim_time: bool,
                                camera_type: CameraType,
                                setup: str,
-                               num_cameras: int
+                               num_cameras: int,
+                               gripper_type: str,
+                               robot_type: str = 'UR',
                                ) -> List[Node]:
     """
     Add a node to publish calibration parameters to the static transforms.
@@ -72,6 +74,8 @@ def get_calibration_parameters(workflow_type: WorkflowType,
                 'camera_type': str(camera_type),
                 'tracking_type': tracking_type_str,
                 'calibration_name': setup,
+                'gripper_type': gripper_type,
+                'robot_type': robot_type,
                 'num_cameras': str(num_cameras)
             }.items(),
         ))
@@ -86,7 +90,9 @@ def get_calibration_parameters(workflow_type: WorkflowType,
                 'camera_type': str(camera_type),
                 'tracking_type': tracking_type_str,
                 'calibration_name': setup,
-                'num_cameras': str(num_cameras)
+                'num_cameras': str(num_cameras),
+                'gripper_type': gripper_type,
+                'robot_type': robot_type,
             }.items(),
         ))
     else:

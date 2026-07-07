@@ -64,8 +64,9 @@ def generate_launch_description():
     launch_args = [
         DeclareLaunchArgument(
             'gripper_type',
-            description='Type of gripper to use with UR robot',
-            choices=['robotiq_2f_85', 'robotiq_2f_140'],
+            default_value='robotiq_2f_140',
+            description='Type of gripper attached to the robot arm',
+            choices=['robotiq_2f_85', 'robotiq_2f_140', 'grav'],
         ),
         DeclareLaunchArgument(
             'camera_type',

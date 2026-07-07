@@ -80,15 +80,16 @@ def launch_setup(context: LaunchContext, *args, **kwargs) -> List[Node]:
             [isaac_ros_manipulation_workflow_bringup_include_dir, '/sensors/cameras.launch.py']),
         launch_arguments={key: str(value) for key, value in params.items()}.items())
 
-    # This launch file provides support for UR e-Series robots and Robotiq 2F grippers,
-    # as well as simulated versions of those robots and grippers in Isaac Sim.
-    # It may be replaced or customized to allow use of alternative robots.
+    # Routes to the robot-specific driver launch file based on 'robot_launch_file_path'
+    # in the workflow configuration YAML. This enables support for different robots
+    # without modifying this file.
     driver_nodes = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            [isaac_ros_manipulation_workflow_bringup_include_dir,
-                '/drivers/ur_robotiq_driver.launch.py']
+            [isaac_ros_manipulation_workflow_bringup_include_dir, '/drivers.launch.py']
         ),
-        launch_arguments={key: str(value) for key, value in params.items()}.items())
+        launch_arguments={
+            'manipulator_workflow_config': manipulator_workflow_config_path,
+        }.items())
 
     # The "core" Manipulator launch file launches nodes for cuMotion, nvblox, and either
     # DOPE or the combination of RT-DETR and FoundationPose.

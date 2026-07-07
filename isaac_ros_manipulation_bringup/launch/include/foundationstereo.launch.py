@@ -383,17 +383,18 @@ def launch_setup(context, *args, **kwargs):
     ))
 
     composable_node_descriptions.append(ComposableNode(
-        name='foundationstereo_decoder',
+        name='dnn_stereo_decoder',
         namespace=camera_name,
-        package='isaac_ros_foundationstereo',
-        plugin='nvidia::isaac_ros::dnn_stereo_depth::FoundationStereoDecoderNode',
+        package='isaac_ros_dnn_stereo_decoder',
+        plugin='nvidia::isaac_ros::dnn_stereo_depth::DNNStereoDecoderNode',
         parameters=[{
             'disparity_tensor_name': 'disparity',
             'input_qos_depth': 1,
             'output_qos_depth': 1,
+            'cache_camera_info': True,
         }],
         remappings=[
-            ('right/camera_info', 'right/camera_info_crop')
+            ('right/camera_info', 'right/camera_info_resize')
         ]
     ))
 
@@ -468,11 +469,11 @@ def generate_launch_description():
             description='Namespace for the camera'),
         DeclareLaunchArgument(
             'input_image_height',
-            default_value=str(constants.REALSENSE_IMAGE_HEIGHT),
+            default_value=str(constants.FOUNDATION_STEREO_LOW_RES_INPUT_IMAGE_HEIGHT),
             description='Input image height'),
         DeclareLaunchArgument(
             'input_image_width',
-            default_value=str(constants.HAWK_IMAGE_WIDTH),
+            default_value=str(constants.FOUNDATION_STEREO_LOW_RES_INPUT_IMAGE_WIDTH),
             description='Input image width'),
         DeclareLaunchArgument(
             'depth_type',

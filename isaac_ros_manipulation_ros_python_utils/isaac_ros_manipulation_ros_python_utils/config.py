@@ -22,12 +22,16 @@ import subprocess
 from typing import Any, Dict, List, Optional, Union
 
 from ament_index_python.packages import get_package_share_directory
-from isaac_ros_launch_utils.all_types import LaunchConfiguration
+from isaac_ros_manipulation_ros_python_utils.depth_routing import (
+    select_foundation_pose_depth_routing,
+)
 from isaac_ros_manipulation_ros_python_utils.launch_utils import (
+    compute_frame_prefix, compute_gripper_action_name, compute_gripper_positions,
+    compute_gripper_settle_time, compute_joint_names,
     constants, get_bool_variable, get_camera_type, get_depth_type, get_dnn_stereo_depth_resolution,
     get_float_variable, get_object_attachment_type, get_object_detection_namespace,
     get_object_detection_type, get_object_selection_type, get_pose_estimation_type,
-    get_segmentation_type, get_str_variable, get_workflow_type
+    get_robot_type, get_segmentation_type, get_str_variable, get_workflow_type
 )
 from isaac_ros_manipulation_ros_python_utils.manipulator_types import (
     CameraType,
@@ -37,12 +41,40 @@ from isaac_ros_manipulation_ros_python_utils.manipulator_types import (
     ObjectDetectionType,
     ObjectSelectionType,
     PoseEstimationType,
+    RobotType,
     SegmentationType,
     WorkflowType
 )
 from launch import LaunchContext
+from launch.substitutions import LaunchConfiguration
 from sensor_msgs.msg import JointState
 import yaml
+
+
+def _get_optional_str(context: LaunchContext, name: str) -> str:
+    """
+    Resolve a launch argument that may or may not be declared.
+
+    Thin wrapper around :func:`get_str_variable` that swallows the exception
+    raised when ``name`` is not declared in the current launch file. Used by
+    :class:`DriverConfig` for fields that are only relevant to a subset of
+    vendor launch files (e.g. URDF / SRDF paths unused by vendors that rely
+    on third-party description packages).
+
+    Args
+    ----
+        context (LaunchContext): Active launch context.
+        name (str): Launch argument name to resolve.
+
+    Returns
+    -------
+        str: The declared value, or ``''`` if the argument is not declared.
+
+    """
+    try:
+        return get_str_variable(context, name)
+    except Exception:
+        return ''
 
 
 def load_yaml_params(
@@ -136,66 +168,166 @@ class Config:
         self.headless = get_bool_variable(context, 'headless')
 
 
-class DriverConfig(Config):
-    """Config that tracks all variables needed to run drivers for the robot/Isaac Sim."""
+# Per-gripper collision link tables, used to disable links during the retract/approach
+# phases of pick-and-place. Co-located with DriverConfig (rather than in any vendor
+# driver_utils package) so it can be exposed as a property on DriverConfig without
+# introducing an import cycle with the per-vendor driver_utils packages.
+_GRIPPER_COLLISION_LINKS: Dict[GripperType, List[str]] = {
+    GripperType.ROBOTIQ_2F_140: [
+        'left_outer_knuckle',
+        'left_inner_knuckle',
+        'left_outer_finger',
+        'left_inner_finger',
+        'left_inner_finger_pad',
+        'right_outer_knuckle',
+        'right_inner_knuckle',
+        'right_outer_finger',
+        'right_inner_finger',
+        'right_inner_finger_pad',
+    ],
+    GripperType.ROBOTIQ_2F_85: [
+        'robotiq_85_base_link',
+        'robotiq_85_left_finger_link',
+        'robotiq_85_left_finger_tip_link',
+        'robotiq_85_left_inner_knuckle_link',
+        'robotiq_85_left_knuckle_link',
+        'robotiq_85_right_finger_link',
+        'robotiq_85_right_finger_tip_link',
+        'robotiq_85_right_inner_knuckle_link',
+        'robotiq_85_right_knuckle_link',
+    ],
+    GripperType.GRAV: [
+        'grav_base_link',
+        'left_outer_bar',
+        'left_inner_bar',
+        'left_finger_mount',
+        'left_finger_tip',
+        'right_outer_bar',
+        'right_inner_bar',
+        'right_finger_mount',
+        'right_finger_tip',
+    ],
+}
 
+
+class DriverConfig(Config):
+    """
+    Config that tracks all variables needed to run drivers for the robot/Isaac Sim.
+
+    Owns the vendor-agnostic robot identity (robot_type, TF frames, joint names)
+    and the gripper-derived fields shared by every workflow (action name, open/close
+    positions, settle time, collision link list). Per-vendor driver packages extend
+    this class to add hardware-specific fields (e.g. ``robot_ip``, ``ur_type``).
+    """
+
+    robot_type: RobotType
+    gripper_type: GripperType
     urdf_path: str
     srdf_path: str
     joint_limits_file_path: str
     kinematics_file_path: str
     moveit_controllers_file_path: str
     ros2_controllers_file_path: str
+    frame_prefix: str
+    base_frame: str
+    gripper_frame: str
+    grasp_frame: str
+    insertion_frame: str
+    joint_names: List[str]
+    # Serial number of the physical robot. Currently only populated for Flexiv
+    # (via the ``robot_sn`` launch arg); empty string for every other family.
+    robot_sn: str
+    gripper_action_name: str
+    gripper_open_position: float
+    gripper_close_position: float
+    gripper_settle_time_sec: float
+    gripper_collision_links: List[str]
 
     def __init__(self, context: LaunchContext):
         super().__init__(context)
-        self.urdf_path = get_str_variable(context, 'urdf_path')
-        self.srdf_path = get_str_variable(context, 'srdf_path')
-        self.joint_limits_file_path = get_str_variable(context, 'joint_limits_file_path')
-        self.kinematics_file_path = get_str_variable(context, 'kinematics_file_path')
-        self.moveit_controllers_file_path = get_str_variable(
+        self.robot_type = get_robot_type(context)
+        self.gripper_type = GripperType.get_gripper_type(
+            get_str_variable(context, 'gripper_type'))
+
+        # Robot-description and MoveIt path fields are optional at the
+        # ``DriverConfig`` layer: some vendor integrations (e.g. the real
+        # Flexiv Rizon driver) pull URDF / SRDF / controller configs from
+        # third-party packages and never consume these paths. Wrap each lookup
+        # so a missing launch arg resolves to '' instead of raising, and let
+        # the vendor subclass or utility tell us whether the path is actually
+        # required for its code path.
+        self.urdf_path = _get_optional_str(context, 'urdf_path')
+        self.srdf_path = _get_optional_str(context, 'srdf_path')
+        self.joint_limits_file_path = _get_optional_str(
+            context, 'joint_limits_file_path')
+        self.kinematics_file_path = _get_optional_str(
+            context, 'kinematics_file_path')
+        self.moveit_controllers_file_path = _get_optional_str(
             context, 'moveit_controllers_file_path')
-        self.ros2_controllers_file_path = get_str_variable(context, 'ros2_controllers_file_path')
+        self.ros2_controllers_file_path = _get_optional_str(
+            context, 'ros2_controllers_file_path')
+
+        self.frame_prefix = compute_frame_prefix(context)
+        self.base_frame = f'{self.frame_prefix}base_link'
+        self.gripper_frame = f'{self.frame_prefix}gripper_frame'
+        self.grasp_frame = f'{self.frame_prefix}grasp_frame'
+        self.insertion_frame = f'{self.frame_prefix}insertion_frame'
+        self.joint_names = compute_joint_names(context)
+
+        # ``robot_sn`` is a Flexiv-specific launch arg. Keep the resolution here
+        # (rather than pushing it into ``FlexivRizonDriverConfig``) so every
+        # DriverConfig consumer can reach for ``driver_config.robot_sn`` without
+        # branching on robot family.
+        self.robot_sn = _get_optional_str(context, 'robot_sn')
+
+        gripper_type_str = self.gripper_type.value
+        self.gripper_action_name = compute_gripper_action_name(gripper_type_str)
+        self.gripper_open_position, self.gripper_close_position = (
+            compute_gripper_positions(gripper_type_str)
+        )
+        self.gripper_settle_time_sec = compute_gripper_settle_time(gripper_type_str)
+        try:
+            self.gripper_collision_links = _GRIPPER_COLLISION_LINKS[self.gripper_type]
+        except KeyError as exc:
+            raise NotImplementedError(
+                f'Gripper type {self.gripper_type} not supported') from exc
 
 
-class UrRobotiqDriverConfig(DriverConfig):
-    """Config that tracks all variables needed to perform UR and Robotiq workflows."""
+def build_driver_config(context: LaunchContext) -> DriverConfig:
+    """
+    Build the vendor-specific :class:`DriverConfig` for the running robot.
 
-    controller_spawner_timeout: LaunchConfiguration
-    ur_type: str
-    robot_ip: str
-    gripper_type: str
-    grasp_parent_frame: str
-    log_level: str
-    remapped_joint_states: Dict
-    workflow_type: WorkflowType
-    # The calibration file generated by the UR ros2 driver to get calibration values for joints
-    ur_calibration_file_path: str
+    Dispatches on the ``robot_type`` launch arg to the correct vendor subclass
+    (currently ``UrRobotiqDriverConfig`` or ``FlexivRizonDriverConfig``). The
+    vendor imports are performed lazily inside this function to avoid import
+    cycles: the vendor driver_utils packages depend on this package for the
+    ``DriverConfig`` base class, so this package cannot import them at module
+    load time.
 
-    def __init__(self, context: LaunchContext):
-        super().__init__(context)
-        self.gripper_type = get_str_variable(context, 'gripper_type')
-        self.workflow_type = get_workflow_type(get_str_variable(context, 'workflow_type'))
-        self.ur_type = get_str_variable(context, 'ur_type')
-        self.robot_ip = get_str_variable(context, 'robot_ip')
-        if self.use_sim_time and self.gripper_type == 'robotiq_2f_85':
-            raise ValueError(f'Gripper type {self.gripper_type} not supported for Isaac sim')
+    Args
+    ----
+        context (LaunchContext): Launch context
 
-        self.log_level = get_str_variable(context, 'log_level')
-        self.ur_calibration_file_path = get_str_variable(context, 'ur_calibration_file_path')
-        self.controller_spawner_timeout = LaunchConfiguration('controller_spawner_timeout')
+    Returns
+    -------
+        DriverConfig: Vendor-specific driver config instance
 
-        if self.gripper_type == 'robotiq_2f_140':
-            self.grasp_parent_frame = 'robotiq_base_link'
-        elif self.gripper_type == 'robotiq_2f_85':
-            self.grasp_parent_frame = 'robotiq_85_base_link'
+    Raises
+    ------
+        NotImplementedError: If the ``robot_type`` launch arg value is not a
+            supported ``RobotType``
 
-        if self.use_sim_time:
-            self.remapped_joint_states = {
-                '/joint_states': '/isaac_parsed_joint_states',
-                '/controller_manager/robot_description': '/robot_description',
-            }
-        else:
-            self.remapped_joint_states = {}
+    """
+    robot_type = get_robot_type(context)
+    if robot_type is RobotType.UR:
+        from isaac_ros_manipulation_ur_driver_utils.config import UrRobotiqDriverConfig
+        return UrRobotiqDriverConfig(context)
+    if robot_type is RobotType.FLEXIV:
+        from isaac_ros_manipulation_flexiv_driver_utils.config import (
+            FlexivRizonDriverConfig,
+        )
+        return FlexivRizonDriverConfig(context)
+    raise NotImplementedError(f'Robot type {robot_type} not supported')
 
 
 class CameraConfig(Config):
@@ -210,6 +342,10 @@ class CameraConfig(Config):
     depth_camera_topic_name: str = 'N/A'
     color_camera_info_topic_name: str = 'N/A'
     depth_camera_info_topic_name: str = 'N/A'
+    realsense_depth_camera_topic_name: str = 'N/A'
+    realsense_depth_camera_info_topic_name: str = 'N/A'
+    realsense_depth_image_width: str = 'N/A'
+    realsense_depth_image_height: str = 'N/A'
     rgb_image_width: str = 'N/A'
     rgb_image_height: str = 'N/A'
     depth_image_width: str = 'N/A'
@@ -257,16 +393,19 @@ class RealsenseCameraConfig(CameraConfig):
         super().__init__(context)
         self.camera_type = CameraType.REALSENSE
         self.color_camera_topic_name = '/camera_1/color/image_raw'
-        self.depth_camera_topic_name = '/camera_1/aligned_depth_to_color/image_raw'
+        self.realsense_depth_camera_topic_name = '/camera_1/aligned_depth_to_color/image_raw'
         self.color_camera_info_topic_name = '/camera_1/color/camera_info'
-        self.depth_camera_info_topic_name = '/camera_1/aligned_depth_to_color/camera_info'
+        self.realsense_depth_camera_info_topic_name = \
+            '/camera_1/aligned_depth_to_color/camera_info'
+        self.depth_camera_topic_name = self.realsense_depth_camera_topic_name
+        self.depth_camera_info_topic_name = self.realsense_depth_camera_info_topic_name
         self.rgb_image_width = str(constants.REALSENSE_IMAGE_WIDTH)
         self.rgb_image_height = str(constants.REALSENSE_IMAGE_HEIGHT)
+        self.realsense_depth_image_width = str(constants.REALSENSE_IMAGE_WIDTH)
+        self.realsense_depth_image_height = str(constants.REALSENSE_IMAGE_HEIGHT)
         self.depth_image_width = str(constants.REALSENSE_IMAGE_WIDTH)
         self.depth_image_height = str(constants.REALSENSE_IMAGE_HEIGHT)
 
-        self.enable_dnn_depth_in_realsense = get_bool_variable(
-            context, 'enable_dnn_depth_in_realsense')
         if self.enable_dnn_depth_in_realsense:
             self.ess_depth_camera_topic_name = '/camera_1/depth_image'
             self.ess_depth_camera_info_topic_name = '/camera_1/rgb/camera_info'
@@ -305,6 +444,7 @@ def get_camera_config(context: LaunchContext, camera_type: CameraType) -> Camera
 class SensorConfig(Config):
     """Config tracks variables needed to perform workflows in Isaac Sim and on the real robot."""
 
+    robot_type: RobotType
     camera_type: CameraType
     gripper_type: GripperType
     num_cameras: str
@@ -323,6 +463,7 @@ class SensorConfig(Config):
 
     def __init__(self, context: LaunchContext):
         super().__init__(context)
+        self.robot_type = get_robot_type(context)
         self.gripper_type = get_str_variable(context, 'gripper_type')
         self.camera_type = get_camera_type(get_str_variable(context, 'camera_type'))
         self.num_cameras = get_str_variable(context, 'num_cameras')
@@ -749,6 +890,8 @@ class FoundationPoseConfig(PoseEstimationConfig):
     fp_out_camera_info_topic_name: str  # Output topic name routed into perception pipeline
 
     fp_in_depth_topic_name: str  # Input depth topic name
+    fp_in_depth_image_width: str
+    fp_in_depth_image_height: str
     fp_out_depth_topic_name: str  # Output depth topic name routed into perception pipeline
 
     fp_out_detections_topic_name: str  # Output detections topic name routed into perception
@@ -780,13 +923,9 @@ class FoundationPoseConfig(PoseEstimationConfig):
         self.depth_type = get_depth_type(get_str_variable(context, 'depth_type'))
 
         if self.workflow_type == WorkflowType.OBJECT_FOLLOWING:
-            # We don't allow FoundationPose to run on ESS/FoundationStereo depth for
-            # object following. This is because the depth, color and segmentation need exact
-            # timestamps for foundationpose and realsense emits infra1/infra2 at different
-            # timestamps than rgb stream which requires a timestamp matching node which is not
-            # currently setup. We get around this for PICK and PLACE / GEAR ASSEMBLY by manually
-            # overwriting timestamps of the messages in Manipulator servers to be the same before
-            # publishing.
+            # FoundationPose object following needs timestamp-matched color, depth, and
+            # segmentation. Keep this pose-estimation path on native RealSense depth; the
+            # camera, nvblox, and cuMotion paths may still use DNN depth.
             self.enable_dnn_depth_in_realsense = False
 
         self.pose_estimation_type = get_pose_estimation_type(
@@ -830,6 +969,8 @@ class FoundationPoseConfig(PoseEstimationConfig):
         self.fp_in_camera_info_topic_name = 'UPDATED_LATER'  # Verify this for SAM case
         self.fp_out_camera_info_topic_name = '/foundation_pose_server/camera_info'
         self.fp_in_depth_topic_name = 'UPDATED_LATER'
+        self.fp_in_depth_image_width = 'UPDATED_LATER'
+        self.fp_in_depth_image_height = 'UPDATED_LATER'
         self.fp_out_depth_topic_name = '/foundation_pose_server/depth'
         # This is correct for foundation pose.
         self.fp_in_pose_estimate_topic_name = '/pose_estimation/output'
@@ -869,15 +1010,18 @@ class FoundationPoseConfig(PoseEstimationConfig):
     def update_server_topic_names(self, camera_config: CameraConfig):
         self.fp_in_img_topic_name = camera_config.color_camera_topic_name
         self.fp_in_camera_info_topic_name = camera_config.color_camera_info_topic_name
-        self.fp_in_depth_topic_name = camera_config.depth_camera_topic_name
-
-        if (self.enable_dnn_depth_in_realsense
-                and camera_config.camera_type is CameraType.REALSENSE):
-            self.fp_in_depth_topic_name = camera_config.ess_depth_camera_topic_name
+        depth_routing = select_foundation_pose_depth_routing(
+            camera_config=camera_config,
+            workflow_type=self.workflow_type,
+            enable_dnn_depth_in_realsense=self.enable_dnn_depth_in_realsense,
+        )
+        self.fp_in_depth_topic_name = depth_routing.input_depth_topic
+        self.fp_in_depth_image_width = depth_routing.input_depth_image_width
+        self.fp_in_depth_image_height = depth_routing.input_depth_image_height
 
         self.foundation_pose_rgb_image_topic = camera_config.color_camera_topic_name
         self.foundation_pose_rgb_camera_info = camera_config.color_camera_info_topic_name
-        self.foundation_pose_depth_image_topic = camera_config.depth_camera_topic_name
+        self.foundation_pose_depth_image_topic = self.fp_in_depth_topic_name
         self.foundation_pose_detections_topic = self.foundation_pose_detection2_d_topic
         self.realsense_depth_image_topic = self.foundation_pose_depth_image_topic
         if self.workflow_type not in (WorkflowType.PICK_AND_PLACE, WorkflowType.GEAR_ASSEMBLY):
@@ -906,11 +1050,7 @@ class FoundationPoseConfig(PoseEstimationConfig):
         if camera_config.camera_type is CameraType.REALSENSE:
             self.foundation_pose_depth_image_topic = self.realsense_depth_image_topic + '_metric'
 
-        if (self.enable_dnn_depth_in_realsense
-                and camera_config.camera_type is CameraType.REALSENSE):
-            self.depth_camera_info_for_ess = camera_config.ess_depth_camera_info_topic_name
-        else:
-            self.depth_camera_info_for_ess = camera_config.depth_camera_info_topic_name
+        self.depth_camera_info_for_ess = depth_routing.camera_info_topic
 
 
 class OrchestrationConfig(Config):
@@ -921,6 +1061,7 @@ class OrchestrationConfig(Config):
     print_ascii_tree: str
     manual_mode: str
     log_level: str
+    frame_prefix: str
 
     def __init__(self, context: LaunchContext):
         super().__init__(context)
@@ -929,16 +1070,29 @@ class OrchestrationConfig(Config):
         self.print_ascii_tree = get_str_variable(context, 'print_ascii_tree')
         self.manual_mode = get_str_variable(context, 'manual_mode')
         self.log_level = get_str_variable(context, 'log_level')
+        # TF prefix sourced once from the bringup config (Flexiv `robot_sn` /
+        # UR `tf_prefix`) so the BT YAML can stay robot-agnostic.
+        self.frame_prefix = compute_frame_prefix(context)
 
 
 class WorkflowConfigParams(Config):
-    """Config that tracks all variables needed to perform workflows."""
+    """
+    Config that tracks all variables needed to perform workflows.
+
+    Every workflow (object following, pose-to-pose, pick-and-place, gear assembly)
+    runs against a concrete robot, so every :class:`WorkflowConfigParams` owns a
+    vendor-specific :class:`DriverConfig` instance. Call sites that need
+    robot-identity / frame / joint / gripper fields should reach for them through
+    ``driver_config`` rather than duplicating the values on the workflow config.
+    """
 
     workflow_type: WorkflowType
+    driver_config: DriverConfig
 
     def __init__(self, context: LaunchContext):
         super().__init__(context)
         self.workflow_type = get_workflow_type(get_str_variable(context, 'workflow_type'))
+        self.driver_config = build_driver_config(context)
 
 
 class ObjectFollowingConfig(WorkflowConfigParams):
@@ -963,7 +1117,15 @@ class PoseToPoseConfig(WorkflowConfigParams):
 
 
 class PickAndPlaceConfig(WorkflowConfigParams):
-    """Config that tracks all variables needed to perform pick and place workflows."""
+    """
+    Config that tracks all variables needed to perform pick and place workflows.
+
+    Robot-identity, TF frames, joint names, and gripper-derived fields live on
+    ``self.driver_config`` (inherited from :class:`WorkflowConfigParams`). This
+    class only adds workflow-level knobs (retries, grasp files, attachment,
+    home pose, orchestration). Call sites should read robot/gripper fields via
+    ``workflow_config.driver_config.<field>``.
+    """
 
     use_ground_truth_pose_in_sim: bool
     pick_and_place_planner_retries: int
@@ -978,7 +1140,6 @@ class PickAndPlaceConfig(WorkflowConfigParams):
     time_dilation_factor: str
     attach_object_mesh_file_path: str
     end_effector_mesh_resource_uri: str
-    gripper_type: GripperType
     orchestration_config: OrchestrationConfig
 
     def __init__(self, context: LaunchContext):
@@ -1008,7 +1169,6 @@ class PickAndPlaceConfig(WorkflowConfigParams):
             context, 'end_effector_mesh_resource_uri'
         )
         self.time_dilation_factor = get_float_variable(context, 'time_dilation_factor')
-        self.gripper_type = GripperType.get_gripper_type(get_str_variable(context, 'gripper_type'))
         self.object_attachment_scale = LaunchConfiguration('object_attachment_scale')
         self.use_pose_from_rviz = LaunchConfiguration('use_pose_from_rviz')
         self.move_to_home_pose_after_place = LaunchConfiguration('move_to_home_pose_after_place')
@@ -1045,6 +1205,9 @@ class GearAssemblyConfig(PickAndPlaceConfig):
     offset_for_insertion_pose: float
     timeout_for_insertion_action_call: float
     model_frequency: float
+    place_pose_z_rotation_deg: float
+    post_insertion_gripper_rotation_deg: float
+    enable_controller_switching: bool
 
     def __init__(self, context: LaunchContext):
         super().__init__(context)
@@ -1096,6 +1259,15 @@ class GearAssemblyConfig(PickAndPlaceConfig):
         self.timeout_for_insertion_action_call = get_float_variable(
             context, 'gear_assembly_timeout_for_insertion_action_call')
         self.model_frequency = get_float_variable(context, 'gear_assembly_model_frequency')
+        self.place_pose_z_rotation_deg = get_float_variable(
+            context, 'gear_assembly_place_pose_z_rotation_deg')
+        self.post_insertion_gripper_rotation_deg = get_float_variable(
+            context, 'gear_assembly_post_insertion_gripper_rotation_deg')
+        # Controller switching (impedance <-> trajectory) is only needed for UR robots.
+        # Flexiv (grav gripper) uses a single control mode set at launch time.
+        self.enable_controller_switching = (
+            self.driver_config.gripper_type != GripperType.GRAV
+        )
 
         # Get the home target position from the policy.
         file_path_for_env_yaml = os.path.join(
@@ -1110,6 +1282,15 @@ class GearAssemblyConfig(PickAndPlaceConfig):
         else:
             raise ValueError(f'initial_joint_pos not found in {file_path_for_env_yaml}')
 
+        joint_names = self.driver_config.joint_names
+        expected_dof = len(joint_names)
+        actual_dof = len(home_target_position)
+        if actual_dof != expected_dof:
+            raise ValueError(
+                f'initial_joint_pos in {file_path_for_env_yaml} has {actual_dof} '
+                f'values but the selected robot has {expected_dof} joints '
+                f'({joint_names}). Update the env.yaml to match the robot DOF.')
+
         added_size = 0
         if self.use_sim_time:
             added_size = 1
@@ -1120,11 +1301,7 @@ class GearAssemblyConfig(PickAndPlaceConfig):
         joint_state.velocity = [0.0] * (len(home_target_position) + added_size)
         joint_state.effort = [0.0] * (len(home_target_position) + added_size)
 
-        # Set joint names based on the number of joints (assuming UR10e joint names)
-        joint_state.name = [
-            'shoulder_pan_joint', 'shoulder_lift_joint', 'elbow_joint',
-            'wrist_1_joint', 'wrist_2_joint', 'wrist_3_joint'
-        ]
+        joint_state.name = list(joint_names)
 
         self.home_joint_state = joint_state
 
@@ -1149,6 +1326,7 @@ class CuMotionConfig(Config):
 
     cumotion_urdf_file_path: str
     cumotion_xrdf_file_path: str
+    cumotion_joint_states_topic: str
     distance_threshold: float
     num_cameras: int
     moveit_collision_objects_scene_file: str
@@ -1162,6 +1340,8 @@ class CuMotionConfig(Config):
         self.moveit_collision_objects_scene_file = (
             get_str_variable(context, 'moveit_collision_objects_scene_file')
         )
+        self.cumotion_joint_states_topic = get_str_variable(
+            context, 'cumotion_joint_states_topic')
 
 
 class CoreConfig(Config):

@@ -27,9 +27,7 @@ def launch_setup(context, *args, **kwargs):
     camera_type_str = str(context.perform_substitution(LaunchConfiguration('camera_type')))
     mesh_file_path = LaunchConfiguration('mesh_file_path')
     texture_path = LaunchConfiguration('texture_path')
-    refine_model_file_path = LaunchConfiguration('refine_model_file_path')
     refine_engine_file_path = LaunchConfiguration('refine_engine_file_path')
-    score_model_file_path = LaunchConfiguration('score_model_file_path')
     score_engine_file_path = LaunchConfiguration('score_engine_file_path')
     tf_frame_name = context.perform_substitution(LaunchConfiguration('tf_frame_name'))
     refine_iterations = int(context.perform_substitution(LaunchConfiguration('refine_iterations')))
@@ -161,21 +159,10 @@ def launch_setup(context, *args, **kwargs):
 
             'mesh_file_path': mesh_file_path,
             'texture_path': texture_path,
-
-            'refine_model_file_path': refine_model_file_path,
-            'refine_engine_file_path': refine_engine_file_path,
             'refine_input_tensor_names': ['input_tensor1', 'input_tensor2'],
-            'refine_input_binding_names': ['input1', 'input2'],
-            'refine_output_tensor_names': ['output_tensor1', 'output_tensor2'],
-            'refine_output_binding_names': ['output1', 'output2'],
             'refine_iterations': refine_iterations,
 
-            'score_model_file_path': score_model_file_path,
-            'score_engine_file_path': score_engine_file_path,
             'score_input_tensor_names': ['input_tensor1', 'input_tensor2'],
-            'score_input_binding_names': ['input1', 'input2'],
-            'score_output_tensor_names': ['output_tensor'],
-            'score_output_binding_names': ['output1'],
             'tf_frame_name': tf_frame_name,
 
             'symmetry_axes': symmetry_axes,
@@ -194,6 +181,47 @@ def launch_setup(context, *args, **kwargs):
             ('pose_estimation/output', output_pose_estimate_topic)]
     )
 
+    refine_trt_node = ComposableNode(
+        name='refine_trt',
+        package='isaac_ros_tensor_rt',
+        plugin='nvidia::isaac_ros::dnn_inference::TensorRTNode',
+        parameters=[{
+            'engine_file_path': refine_engine_file_path,
+            'input_tensor_names': ['input_tensor1', 'input_tensor2'],
+            'input_binding_names': ['input1', 'input2'],
+            'output_tensor_names': ['output_tensor1', 'output_tensor2'],
+            'output_binding_names': ['output1', 'output2'],
+            'force_engine_update': False,
+            'verbose': False,
+            'max_batch_size': 42,
+        }],
+        remappings=[
+            ('tensor_pub', 'refine/tensor_pub'),
+            ('tensor_sub', 'refine/tensor_sub'),
+        ]
+    )
+
+    score_trt_node = ComposableNode(
+        name='score_trt',
+        package='isaac_ros_tensor_rt',
+        plugin='nvidia::isaac_ros::dnn_inference::TensorRTNode',
+        parameters=[{
+            'engine_file_path': score_engine_file_path,
+            'input_tensor_names': ['input_tensor1', 'input_tensor2'],
+            'input_binding_names': ['input1', 'input2'],
+            'output_tensor_names': ['output_tensor'],
+            'output_binding_names': ['output1'],
+            'force_engine_update': False,
+            'verbose': False,
+            'max_batch_size': 252,
+        }],
+        remappings=[
+            ('tensor_pub', 'score/tensor_pub'),
+            ('tensor_sub', 'score/tensor_sub'),
+        ]
+    )
+
+    composable_node_descriptions.extend([refine_trt_node, score_trt_node])
     composable_node_descriptions.append(foundationpose_node)
 
     load_composable_nodes = LoadComposableNodes(
@@ -230,17 +258,9 @@ def generate_launch_description():
             default_value='/tmp/texture_map.png',
             description='The absolute file path to the texture map'),
         DeclareLaunchArgument(
-            'refine_model_file_path',
-            default_value='/tmp/refine_model.onnx',
-            description='The absolute file path to the refine model'),
-        DeclareLaunchArgument(
             'refine_engine_file_path',
             default_value='/tmp/refine_trt_engine.plan',
             description='The absolute file path to the refine trt engine'),
-        DeclareLaunchArgument(
-            'score_model_file_path',
-            default_value='/tmp/score_model.onnx',
-            description='The absolute file path to the score model'),
         DeclareLaunchArgument(
             'score_engine_file_path',
             default_value='/tmp/score_trt_engine.plan',

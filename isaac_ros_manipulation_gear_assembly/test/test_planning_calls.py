@@ -230,7 +230,7 @@ class PlanningCallsTest(_parent_module.PickAndPlaceOrchestratorTest):
         place_pose.orientation.w = place_tf['rotation']['w']
 
         model_path = os.path.join(
-            ISAAC_ROS_WS, 'isaac_ros_assets', 'isaac_ros_manipulation_ur_dnn_policy')
+            ISAAC_ROS_WS, 'isaac_ros_assets', 'isaac_ros_manipulation_dnn_policy')
         target_joint_state = parse_joint_state_from_yaml(
             model_path + '/params/env.yaml', use_sim_time=False)
 

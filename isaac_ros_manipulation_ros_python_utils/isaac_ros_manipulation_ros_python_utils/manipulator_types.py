@@ -23,6 +23,7 @@ class GripperType(enum.Enum):
 
     ROBOTIQ_2F_140 = 'robotiq_2f_140'
     ROBOTIQ_2F_85 = 'robotiq_2f_85'
+    GRAV = 'grav'
 
     @classmethod
     def get_gripper_type(self, gripper_type: str):
@@ -42,8 +43,10 @@ class GripperType(enum.Enum):
             return GripperType.ROBOTIQ_2F_140
         elif gripper_type == GripperType.ROBOTIQ_2F_85.value:
             return GripperType.ROBOTIQ_2F_85
+        elif gripper_type == GripperType.GRAV.value:
+            return GripperType.GRAV
         else:
-            raise NotImplementedError(f'Camera type {gripper_type} not supported')
+            raise NotImplementedError(f'Gripper type {gripper_type} not supported')
 
 
 class EnumMeta(enum.EnumMeta):
@@ -197,6 +200,20 @@ class WorkflowType(enum.Enum):
     PICK_AND_PLACE = 'PICK_AND_PLACE'
     OBJECT_FOLLOWING = 'OBJECT_FOLLOWING'
     GEAR_ASSEMBLY = 'GEAR_ASSEMBLY'
+
+
+class RobotType(ManipulatorEnum):
+    """
+    Robot families supported by Isaac Manipulator.
+
+    Used to drive type-safe dispatch in shared launch utilities (e.g. TF frame
+    prefix and arm joint name derivation) instead of sniffing for
+    robot-family-specific launch args (``robot_sn`` for Flexiv, ``tf_prefix``
+    for UR).
+    """
+
+    UR = 'UR'
+    FLEXIV = 'FLEXIV'
 
 
 class ObjectStatus(enum.Enum):

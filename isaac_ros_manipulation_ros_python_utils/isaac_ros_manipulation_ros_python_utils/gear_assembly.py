@@ -22,6 +22,7 @@ from typing import List
 from ament_index_python.packages import get_package_share_directory
 
 from isaac_ros_manipulation_ros_python_utils.config import GearAssemblyConfig
+from isaac_ros_manipulation_ros_python_utils.manipulator_types import GripperType, RobotType
 from launch.actions import (
     IncludeLaunchDescription, Shutdown
 )
@@ -65,7 +66,7 @@ def get_gear_assembly_nodes(gear_assembly_config: GearAssemblyConfig,
     # This node will look for action client request to move the robot to insert a gripped
     # gear into a gear stand.
     gear_assembly_action_server_node = Node(
-        package='isaac_ros_manipulation_ur_dnn_policy',
+        package='isaac_ros_manipulation_dnn_policy',
         executable='insertion_policy_action_server.py',
         name='gear_assembly_action_server',
         namespace='gear_assembly',
@@ -80,14 +81,14 @@ def get_gear_assembly_nodes(gear_assembly_config: GearAssemblyConfig,
     )
 
     gear_assembly_goal_pose_publisher_node = Node(
-        package='isaac_ros_manipulation_ur_dnn_policy',
+        package='isaac_ros_manipulation_dnn_policy',
         executable='goal_pose_publisher_node.py',
         name='gear_assembly_goal_pose_publisher',
         namespace='gear_assembly',
         parameters=[{
             'use_sim_time': use_sim_time,
             'enable_publishing_on_trigger': True,
-            'world_frame': 'base',
+            'world_frame': gear_assembly_config.driver_config.base_frame,
             'frequency': gear_assembly_config.model_frequency
         }],
         remappings=[
@@ -97,20 +98,19 @@ def get_gear_assembly_nodes(gear_assembly_config: GearAssemblyConfig,
     )
 
     gear_assembly_completion_checker_node = Node(
-        package='isaac_ros_manipulation_ur_dnn_policy',
+        package='isaac_ros_manipulation_dnn_policy',
         executable='insertion_status_checker.py',
         name='gear_assembly_insertion_status_checker',
         namespace='gear_assembly',
         parameters=[{
             'use_sim_time': use_sim_time,
             'goal_frame': 'rl_insertion_pose_frame',
-            'end_effector_frame': 'insertion_frame',
+            'end_effector_frame': gear_assembly_config.driver_config.insertion_frame,
             'distance_threshold': 0.0130,
-            'angle_threshold': 3.14,  # rotation does not matter for insertion
+            'angle_threshold': 3.14,
             'timeout_seconds': gear_assembly_config.timeout_for_insertion_action_call
         }],
         remappings=[
-            # We publish to the same topic so that it updates insertion status
             ('sub_insertion_status', gear_assembly_config.insertion_status_topic),
             ('pub_insertion_status', gear_assembly_config.insertion_status_topic),
         ],
@@ -127,22 +127,48 @@ def get_gear_assembly_nodes(gear_assembly_config: GearAssemblyConfig,
     gear_assembly_checkpoint_model_path = gear_assembly_config.model_path + '/' \
         + gear_assembly_config.model_file_name
 
-    inference_launch_node = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            [os.path.join(
-                get_package_share_directory('isaac_ros_manipulation_ur_dnn_policy'),
-                'launch',
-                'inference.launch.py')]),
-        launch_arguments={
-            'checkpoint': gear_assembly_checkpoint_model_path,
-            'ros_bag_folder_path': gear_assembly_config.ros_bag_folder_path,
-            'record': 'True' if gear_assembly_config.enable_recording else 'False',
-            'target_joint_positions': gear_assembly_config.target_joint_state_topic,
-            'use_sim_time': 'True' if use_sim_time else 'False',
-            'input_joint_states': gear_assembly_config.joint_state_topic,
-            'input_goal_pose_topic': gear_assembly_config.goal_pose_topic,
-        }.items(),
-    )
+    is_flexiv = (gear_assembly_config.driver_config.gripper_type == GripperType.GRAV)
+
+    if is_flexiv:
+        # Flexiv: use the dedicated inference pipeline with joint remapping,
+        # streaming controller output, and enable_goal_pose_publisher=False
+        # so the existing gear_assembly_goal_pose_publisher_node feeds /goal_pose.
+        inference_launch_node = IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                [os.path.join(
+                    get_package_share_directory('isaac_ros_manipulation_dnn_policy'),
+                    'launch',
+                    'inference_flexiv_gear_insertion.launch.py')]),
+            launch_arguments={
+                'checkpoint': gear_assembly_checkpoint_model_path,
+                'ros_bag_folder_path': gear_assembly_config.ros_bag_folder_path,
+                'record': 'True' if gear_assembly_config.enable_recording else 'False',
+                'use_sim_time': 'True' if use_sim_time else 'False',
+                'robot_sn': gear_assembly_config.driver_config.robot_sn,
+                'input_joint_states_topic': gear_assembly_config.joint_state_topic,
+                'enable_goal_pose_publisher': 'False',
+                'input_goal_pose_topic': gear_assembly_config.goal_pose_topic,
+                'alpha': str(gear_assembly_config.policy_alpha),
+            }.items(),
+        )
+    else:
+        # UR: use the original inference pipeline
+        inference_launch_node = IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                [os.path.join(
+                    get_package_share_directory('isaac_ros_manipulation_dnn_policy'),
+                    'launch',
+                    'inference.launch.py')]),
+            launch_arguments={
+                'checkpoint': gear_assembly_checkpoint_model_path,
+                'ros_bag_folder_path': gear_assembly_config.ros_bag_folder_path,
+                'record': 'True' if gear_assembly_config.enable_recording else 'False',
+                'target_joint_positions': gear_assembly_config.target_joint_state_topic,
+                'use_sim_time': 'True' if use_sim_time else 'False',
+                'input_joint_states': gear_assembly_config.joint_state_topic,
+                'input_goal_pose_topic': gear_assembly_config.goal_pose_topic,
+            }.items(),
+        )
 
     return [
         inference_launch_node,
@@ -152,7 +178,11 @@ def get_gear_assembly_nodes(gear_assembly_config: GearAssemblyConfig,
     ]
 
 
-def parse_joint_state_from_yaml(yaml_file_path: str, use_sim_time: bool) -> JointState:
+def parse_joint_state_from_yaml(
+    yaml_file_path: str,
+    use_sim_time: bool,
+    joint_names: List[str],
+) -> JointState:
     """
     Parse initial joint positions from a YAML file and return a JointState message.
 
@@ -160,6 +190,7 @@ def parse_joint_state_from_yaml(yaml_file_path: str, use_sim_time: bool) -> Join
     ----
         yaml_file_path (str): Path to the YAML file containing initial_joint_pos
         use_sim_time (bool): Whether to use sim time
+        joint_names (List[str]): Joint names for the target robot
 
     Returns
     -------
@@ -181,21 +212,21 @@ def parse_joint_state_from_yaml(yaml_file_path: str, use_sim_time: bool) -> Join
         else:
             raise ValueError(f'initial_joint_pos not found in {yaml_file_path}')
 
+        if len(home_target_position) != len(joint_names):
+            raise ValueError(
+                f'initial_joint_pos in {yaml_file_path} has '
+                f'{len(home_target_position)} values but robot has '
+                f'{len(joint_names)} joints ({joint_names}).')
+
         added_size = 0
         if use_sim_time:
             added_size = 1
 
-        # Create JointState message
         joint_state = JointState()
         joint_state.position = home_target_position
         joint_state.velocity = [0.0] * (len(home_target_position) + added_size)
         joint_state.effort = [0.0] * (len(home_target_position) + added_size)
-
-        # Set joint names based on the number of joints (assuming UR10e joint names)
-        joint_state.name = [
-            'shoulder_pan_joint', 'shoulder_lift_joint', 'elbow_joint',
-            'wrist_1_joint', 'wrist_2_joint', 'wrist_3_joint'
-        ]
+        joint_state.name = list(joint_names)
 
         return joint_state
 
@@ -231,7 +262,13 @@ def get_gear_assembly_orchestrator(gear_assembly_config: GearAssemblyConfig) -> 
 
     target_joint_state = parse_joint_state_from_yaml(
         gear_assembly_config.model_path + '/params/env.yaml',
-        use_sim_time=gear_assembly_config.use_sim_time)
+        use_sim_time=gear_assembly_config.use_sim_time,
+        joint_names=gear_assembly_config.driver_config.joint_names)
+
+    if gear_assembly_config.driver_config.robot_type == RobotType.UR:
+        peg_pose_base_frame = 'base'
+    else:
+        peg_pose_base_frame = gear_assembly_config.driver_config.base_frame
 
     return [
             Node(
@@ -261,6 +298,27 @@ def get_gear_assembly_orchestrator(gear_assembly_config: GearAssemblyConfig) -> 
                     'output_dir': gear_assembly_config.output_dir,
                     'offset_for_place_pose': gear_assembly_config.offset_for_place_pose,
                     'offset_for_insertion_pose': gear_assembly_config.offset_for_insertion_pose,
+                    'base_frame': gear_assembly_config.driver_config.base_frame,
+                    'peg_pose_base_frame': peg_pose_base_frame,
+                    'gripper_frame': gear_assembly_config.driver_config.gripper_frame,
+                    'grasp_frame': gear_assembly_config.driver_config.grasp_frame,
+                    'gripper_action_name':
+                        gear_assembly_config.driver_config.gripper_action_name,
+                    'gripper_open_position':
+                        gear_assembly_config.driver_config.gripper_open_position,
+                    'gripper_close_position':
+                        gear_assembly_config.driver_config.gripper_close_position,
+                    'gripper_settle_time_sec':
+                        gear_assembly_config.driver_config.gripper_settle_time_sec,
+                    'place_pose_z_rotation_deg':
+                        gear_assembly_config.place_pose_z_rotation_deg,
+                    'post_insertion_gripper_rotation_deg':
+                        gear_assembly_config.post_insertion_gripper_rotation_deg,
+                    'enable_controller_switching':
+                        gear_assembly_config.enable_controller_switching,
+                    'joint_names': gear_assembly_config.driver_config.joint_names,
+                    'joint_limits_file_path':
+                        gear_assembly_config.driver_config.joint_limits_file_path,
                 }],
                 output='screen',
                 on_exit=Shutdown(),
