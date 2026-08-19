@@ -34,10 +34,6 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import ComposableNodeContainer, Node
 
-ISAAC_ROS_WS = os.getenv('ISAAC_ROS_WS')
-if ISAAC_ROS_WS is None:
-    raise ValueError('ISAAC_ROS_WS env variable is not set')
-
 
 def launch_setup(context: LaunchContext, *args, **kwargs) -> List[Node]:
     launch_dir = os.path.join(
@@ -170,8 +166,8 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'mesh_file_path',
-            default_value=f'{ISAAC_ROS_WS}/isaac_ros_assets/'
-                          f'isaac_ros_manipulation_dnn_policy/gear_base/gear_base.obj',
+            default_value='isaac_ros_assets/isaac_ros_manipulation_dnn_policy/'
+                          'gear_base/gear_base.obj',
             description='File path to the mesh file',
         ),
         DeclareLaunchArgument(
@@ -181,31 +177,27 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'sam_model_repository_paths',
-            default_value=f'["{ISAAC_ROS_WS}/isaac_ros_assets/models/triton"]',
+            default_value='["isaac_ros_assets/models"]',
             description='File path to the repository of SAM models',
         ),
         DeclareLaunchArgument(
             'refine_model_file_path',
-            default_value=f'{ISAAC_ROS_WS}/isaac_ros_assets/models/foundationpose/'
-                          f'refine_model.onnx',
+            default_value='isaac_ros_assets/models/foundationpose/refine_model.onnx',
             description='File path to the FoundationPose refine model',
         ),
         DeclareLaunchArgument(
             'refine_engine_file_path',
-            default_value=f'{ISAAC_ROS_WS}/isaac_ros_assets/models/foundationpose/'
-                          f'refine_trt_engine.plan',
+            default_value='isaac_ros_assets/models/foundationpose/refine_trt_engine.plan',
             description='File path to the FoundationPose refine trt engine',
         ),
         DeclareLaunchArgument(
             'score_model_file_path',
-            default_value=f'{ISAAC_ROS_WS}/isaac_ros_assets/models/foundationpose/'
-                          f'score_model.onnx',
+            default_value='isaac_ros_assets/models/foundationpose/score_model.onnx',
             description='File path to the FoundationPose score model',
         ),
         DeclareLaunchArgument(
             'score_engine_file_path',
-            default_value=f'{ISAAC_ROS_WS}/isaac_ros_assets/models/foundationpose/'
-                          f'score_trt_engine.plan',
+            default_value='isaac_ros_assets/models/foundationpose/score_trt_engine.plan',
             description='File path to the FoundationPose score trt engine',
         ),
         DeclareLaunchArgument(

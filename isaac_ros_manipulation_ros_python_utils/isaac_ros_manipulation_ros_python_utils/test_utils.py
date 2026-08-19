@@ -2504,7 +2504,7 @@ class TestGearPointPublisher(IsaacROSBaseTest):
         return True
 
     def test_latency_of_mask_output(self):
-        """Publish the next gear coordinate and update counters."""
+        """Verify that mono8 masks are produced within the latency limit."""
         if not self._run_test:
             self.node.get_logger().warn('RUN_TEST is not set to true')
             return
@@ -2513,6 +2513,7 @@ class TestGearPointPublisher(IsaacROSBaseTest):
 
         test_final_status = False
         last_publish_time = time.time()
+        received_mask_count = 0
 
         while not test_final_status:
 
@@ -2527,8 +2528,17 @@ class TestGearPointPublisher(IsaacROSBaseTest):
 
             # Check the latency of the mask output
             if len(self.received_messages[self._monitor_topic_name]) > 0:
-                current_timestamp = self.received_messages[
-                    self._monitor_topic_name][-1].header.stamp
+                mask_messages = self.received_messages[self._monitor_topic_name]
+                received_mask_count += len(mask_messages)
+
+                for mask_message in mask_messages:
+                    self.assertEqual(
+                        mask_message.encoding,
+                        'mono8',
+                        f'Mask on {self._monitor_topic_name} has encoding '
+                        f'{mask_message.encoding}, expected mono8')
+
+                current_timestamp = mask_messages[-1].header.stamp
 
                 # Get timestamp in milliseconds
                 current_timestamp_ns = current_timestamp.sec * 1e9 + current_timestamp.nanosec
@@ -2552,6 +2562,11 @@ class TestGearPointPublisher(IsaacROSBaseTest):
 
                 # Set received message to empty list for next cycle
                 self.received_messages[self._monitor_topic_name] = []
+
+        self.assertGreater(
+            received_mask_count,
+            0,
+            f'No masks received on {self._monitor_topic_name}')
 
     def run_for_each_iteration(self):
         # Stop if we've gone through all cycles

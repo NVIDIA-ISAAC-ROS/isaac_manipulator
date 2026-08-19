@@ -378,12 +378,11 @@ class ModelSetup:
         else:
             self.logger.info(f'SAM model already exists at {pth_path} - Skipping download')
 
-        # Check if platform is x86 for ONNX conversion
-        import platform
-        is_x86 = platform.machine() in ['x86_64', 'AMD64', 'i386', 'i686']
-
         onnx_path = models_sam_dir / 'model.onnx'
-        if is_x86 and (not onnx_path.exists() or self.force):
+        # ONNX is platform-agnostic, so convert on every platform (arm64 included)
+        # now that torch/onnx deps resolve natively. The TRT engine built from it
+        # downstream is what is platform-specific.
+        if not onnx_path.exists() or self.force:
 
             try:
                 import segment_anything  # noqa: F401
@@ -406,8 +405,6 @@ class ModelSetup:
                 self.logger.error('Failed to convert SAM model to ONNX format')
                 return False
             self.logger.info(f'SAM model converted to ONNX at {onnx_path}')
-        elif not is_x86:
-            self.logger.info('Skipping ONNX conversion as platform is not x86')
         else:
             self.logger.info(f'ONNX model already exists at {onnx_path} - Skipping conversion')
 
@@ -505,12 +502,8 @@ class ModelSetup:
         else:
             self.logger.info(f'SAM2 model already exists at {pth_path} - Skipping download')
 
-        # Check if platform is x86 for ONNX conversion
-        import platform
-        is_x86 = platform.machine() in ['x86_64', 'AMD64', 'i386', 'i686']
-
         onnx_path = models_sam2_dir / 'model.onnx'
-        if is_x86 and (not onnx_path.exists() or self.force):
+        if not onnx_path.exists() or self.force:
             # Install sam2 package if not already installed
             try:
                 import sam2  # noqa: F401
@@ -553,8 +546,6 @@ class ModelSetup:
                 self.logger.error('Failed to convert SAM2 model to ONNX format')
                 return False
             self.logger.info(f'SAM2 model converted to ONNX at {onnx_path}')
-        elif not is_x86:
-            self.logger.info('Skipping ONNX conversion as platform is not x86')
         else:
             self.logger.info(f'ONNX model already exists at {onnx_path} - Skipping conversion')
 
