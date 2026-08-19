@@ -39,6 +39,10 @@ def generate_launch_description():
             default_value='',
             description='The absolute file path to the TensorRT engine file'),
         DeclareLaunchArgument(
+            'dope_max_workspace_size',
+            default_value='536870912',
+            description='The TensorRT builder workspace size in bytes'),
+        DeclareLaunchArgument(
             'object_name',
             default_value='soup',
             description='The object class that the DOPE network is detecting'),
@@ -103,6 +107,7 @@ def generate_launch_description():
     # Tensor RT parameters
     dope_model_file_path = LaunchConfiguration('dope_model_file_path')
     dope_engine_file_path = LaunchConfiguration('dope_engine_file_path')
+    dope_max_workspace_size = LaunchConfiguration('dope_max_workspace_size')
     input_tensor_names = LaunchConfiguration('input_tensor_names', default='["input_tensor"]')
     input_binding_names = LaunchConfiguration('input_binding_names', default='["input"]')
     input_tensor_formats = LaunchConfiguration(
@@ -195,7 +200,8 @@ def generate_launch_description():
             'verbose': tensorrt_verbose,
             'input_qos': dope_input_qos,
             'output_qos': dope_input_qos,
-            'force_engine_update': force_engine_update
+            'force_engine_update': force_engine_update,
+            'max_workspace_size': dope_max_workspace_size,
         }])
 
     dope_decoder_node = ComposableNode(

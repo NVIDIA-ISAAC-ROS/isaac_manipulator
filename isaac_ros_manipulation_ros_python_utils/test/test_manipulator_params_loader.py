@@ -74,23 +74,23 @@ class TestLoadYamlParams(unittest.TestCase):
         self.assertEqual(
             params['ess_full_engine_file_path'],
             f'{ISAAC_ROS_WS}/isaac_ros_assets/models'
-            '/dnn_stereo_disparity/dnn_stereo_disparity_v4.1.0_onnx_trt10.13/ess.engine')
+            '/dnn_stereo_disparity/dnn_stereo_disparity_v4.1.0_onnx_trt10.16/ess.engine')
 
         self.assertEqual(
             params['ess_light_engine_file_path'],
             f'{ISAAC_ROS_WS}/isaac_ros_assets/models'
-            '/dnn_stereo_disparity/dnn_stereo_disparity_v4.1.0_onnx_trt10.13/light_ess.engine')
+            '/dnn_stereo_disparity/dnn_stereo_disparity_v4.1.0_onnx_trt10.16/light_ess.engine')
 
         self.assertEqual(
             params['foundationstereo_low_res_engine_file_path'],
             f'{ISAAC_ROS_WS}/isaac_ros_assets/models'
-            '/foundationstereo/deployable_foundation_stereo_small_v1.0'
+            '/foundationstereo/deployable_v2.0'
             '/foundationstereo_320x736.engine')
 
         self.assertEqual(
             params['foundationstereo_high_res_engine_file_path'],
             f'{ISAAC_ROS_WS}/isaac_ros_assets/models'
-            '/foundationstereo/deployable_foundation_stereo_small_v1.0'
+            '/foundationstereo/deployable_v2.0'
             '/foundationstereo_576x960.engine')
 
         # also test env variables are applied inside of lists.

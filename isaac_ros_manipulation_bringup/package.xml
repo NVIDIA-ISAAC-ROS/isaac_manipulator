@@ -21,7 +21,7 @@ SPDX-License-Identifier: Apache-2.0
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>isaac_ros_manipulation_bringup</name>
-  <version>4.5.0</version>
+  <version>4.6.0</version>
   <description>Reference example package for Isaac ROS Manipulation</description>
   <maintainer email="isaac-ros-maintainers@nvidia.com">Isaac ROS Maintainers</maintainer>
   <license>Apache-2.0</license>
@@ -72,7 +72,10 @@ SPDX-License-Identifier: Apache-2.0
 
   <exec_depend>realsense2_camera</exec_depend>
   <exec_depend>rqt_image_view</exec_depend>
+  <exec_depend>rviz_ogre_vendor</exec_depend>
   <exec_depend>rviz2</exec_depend>
+  <exec_depend>sdformat_urdf</exec_depend>
+  <exec_depend>sdformat_vendor</exec_depend>
   <exec_depend>vision_msgs_rviz_plugins</exec_depend>
   <exec_depend>tf2_ros</exec_depend>
   <exec_depend>isaac_ros_manipulation_flexiv_driver_utils</exec_depend>
